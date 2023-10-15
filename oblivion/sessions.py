@@ -31,7 +31,7 @@ class Session:
 
         # 发送请求
         request.send()
-        return request.recv().decode()
+        return request.recv()
 
     def get(
         self,

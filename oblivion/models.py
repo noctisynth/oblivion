@@ -46,11 +46,11 @@ class Request:
         except ConnectionRefusedError:
             raise exceptions.ConnectionRefusedError("向服务端的链接请求被拒绝, 可能是服务端由于宕机.")
 
-        self.public_key = self.tcp.recv(1024)
-        logger.debug(f"接收到的公钥: {self.public_key.decode()}")
+        self.server_public_key = self.tcp.recv(1024)
+        logger.debug(f"接收到的公钥: {self.server_public_key.decode()}")
 
         self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
-        self.encrypted_aes_key = encrypt_aes_key(self.aes_key, self.public_key) # 使用RSA公钥加密AES密钥
+        self.encrypted_aes_key = encrypt_aes_key(self.aes_key, self.server_public_key) # 使用RSA公钥加密AES密钥
         self.tcp.sendall(length(self.encrypted_aes_key)) # 发送AES_KEY长度
         self.tcp.sendall(self.encrypted_aes_key) # 发送AES_KEY
 
@@ -75,18 +75,30 @@ class Request:
         if not self.prepared:
             raise NotImplementedError
 
+        private_key, public_key = generate_key_pair()
+        self.tcp.sendall(public_key) # 发送本地公钥
+
+        len_encrypted_aes_key = int(self.tcp.recv(4).decode()) # 捕获AES_KEY长度
+        encrypted_aes_key = self.tcp.recv(len_encrypted_aes_key) # 捕获AES_KEY
+        decrypted_aes_key = decrypt_aes_key(encrypted_aes_key, private_key) # 使用RSA私钥解密AES密钥
+        logger.debug("捕获到服务端传回的AES_KEY.")
+
         # 接受请求返回
         len_recv = int(self.tcp.recv(4).decode())
-        self.data = self.tcp.recv(len_recv)
+        encrypted_data = self.tcp.recv(len_recv)
+        len_nonce = int(self.tcp.recv(4).decode()) # 捕获nonce长度
+        nonce = self.tcp.recv(len_nonce) # 捕获nonce
+
+        self.data = decrypt_message(encrypted_data, None, decrypted_aes_key, nonce) # 使用AES解密应答
+
         return self.data
 
 
 class Hook:
     def __init__(self, olps: str, data: str="", method="GET") -> None:
         self.olps = olps
-        self.data = data.encode()
+        self.data = data
         self.method = method.upper()
-        self.length = length(self.data)
 
     def __eq__(self, __value: object) -> bool:
         return self.is_valid(__value)
@@ -125,21 +137,38 @@ class Server:
 
             len_encrypted_aes_key = int(client_socket.recv(4).decode()) # 捕获AES_KEY长度
             encrypted_aes_key = client_socket.recv(len_encrypted_aes_key) # 捕获AES_KEY
-
             decrypted_aes_key = decrypt_aes_key(encrypted_aes_key, private_key) # 使用RSA私钥解密AES密钥
+
             len_ciphertext = int(client_socket.recv(4).decode()) # 捕获加密文本长度
-            ciphertext = client_socket.recv(len_ciphertext) # 捕获加密文本
+            response = client_socket.recv(len_ciphertext) # 捕获加密文本
             len_nonce = int(client_socket.recv(4).decode()) # 捕获nonce长度
             nonce = client_socket.recv(len_nonce) # 捕获nonce
 
-            header = decrypt_message(ciphertext, None, decrypted_aes_key, nonce) # 使用AES解密消息
+            header = decrypt_message(response, None, decrypted_aes_key, nonce) # 使用AES解密消息
 
             logger.debug(f"Header: {header}")
             for hook in self.hooks:
                 logger.debug(f"Check Hook: {hook.olps}")
                 if hook == header:
-                    client_socket.sendall(hook.length)
-                    client_socket.sendall(hook.data)
+                    client_public_key = client_socket.recv(1024) # 从客户端获得公钥
+                    logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
+
+                    self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
+                    self.encrypted_aes_key = encrypt_aes_key(self.aes_key, client_public_key) # 使用客户端RSA公钥加密AES密钥
+
+                    client_socket.sendall(length(self.encrypted_aes_key)) # 发送AES_KEY长度
+                    client_socket.sendall(self.encrypted_aes_key) # 发送AES_KEY
+
+                    response, _, nonce = encrypt_message(hook.data, self.aes_key) # 使用AES加密应答
+
+                    # 发送完整应答
+                    client_socket.sendall(length(response))
+                    client_socket.sendall(response)
+
+                    # 发送nonce
+                    client_socket.sendall(length(nonce))
+                    client_socket.sendall(nonce)
+
                     client_socket.close()
                     print(f"Oblivion/1.0 From {client_address} {hook.olps} 200")
                     break
