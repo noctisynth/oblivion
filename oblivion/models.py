@@ -107,6 +107,29 @@ class Hook:
         olps = header.split(" ")[1]
         return self.olps.rstrip("/") == olps.rstrip("/")
 
+    def prepare(self, tcp: socket.socket):
+        client_public_key = tcp.recv(1024) # 从客户端获得公钥
+        logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
+
+        self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
+        self.encrypted_aes_key = encrypt_aes_key(self.aes_key, client_public_key) # 使用客户端RSA公钥加密AES密钥
+
+        tcp.sendall(length(self.encrypted_aes_key)) # 发送AES_KEY长度
+        tcp.sendall(self.encrypted_aes_key) # 发送AES_KEY
+
+    def response(self, tcp: socket.socket):
+        response, _, nonce = encrypt_message(self.data, self.aes_key) # 使用AES加密应答
+
+        # 发送完整应答
+        tcp.sendall(length(response))
+        tcp.sendall(response)
+
+        # 发送nonce
+        tcp.sendall(length(nonce))
+        tcp.sendall(nonce)
+
+        tcp.close()
+
 
 class Server:
     def __init__(
@@ -123,10 +146,13 @@ class Server:
         self.hooks: List[Hook] = hooks
         self.not_found = not_found
 
-    def run(self):
+    def prepare(self):
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp.bind((self.host, self.port))
         self.tcp.listen(self.max_connections)
+
+    def run(self):
+        self.prepare()
 
         # --------------------
         while True:
@@ -150,26 +176,9 @@ class Server:
             for hook in self.hooks:
                 logger.debug(f"Check Hook: {hook.olps}")
                 if hook == header:
-                    client_public_key = client_socket.recv(1024) # 从客户端获得公钥
-                    logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
+                    hook.prepare(client_socket)
+                    hook.response(client_socket)
 
-                    self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
-                    self.encrypted_aes_key = encrypt_aes_key(self.aes_key, client_public_key) # 使用客户端RSA公钥加密AES密钥
-
-                    client_socket.sendall(length(self.encrypted_aes_key)) # 发送AES_KEY长度
-                    client_socket.sendall(self.encrypted_aes_key) # 发送AES_KEY
-
-                    response, _, nonce = encrypt_message(hook.data, self.aes_key) # 使用AES加密应答
-
-                    # 发送完整应答
-                    client_socket.sendall(length(response))
-                    client_socket.sendall(response)
-
-                    # 发送nonce
-                    client_socket.sendall(length(nonce))
-                    client_socket.sendall(nonce)
-
-                    client_socket.close()
                     print(f"Oblivion/1.0 From {client_address} {hook.olps} 200")
                     break
 
