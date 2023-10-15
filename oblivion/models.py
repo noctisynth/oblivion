@@ -144,7 +144,7 @@ class Server:
         self.port = port
         self.max_connections = max_connection
         self.hooks: List[Hook] = hooks
-        self.not_found = not_found
+        self.not_found = Hook("/404", data=not_found)
 
     def prepare(self):
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -185,8 +185,8 @@ class Server:
             if hook == header:
                 continue
 
-            client_socket.sendall(length(self.not_found.encode()))
-            client_socket.sendall(self.not_found.encode())
+            self.not_found.prepare(client_socket)
+            self.not_found.response(client_socket)
             print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
 
 
