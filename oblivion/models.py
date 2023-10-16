@@ -2,18 +2,15 @@ from multilogging import multilogger
 from typing import List
 from Crypto import Random
 
-from oblivion.utils.parser import Oblivion
-
-from .utils.parser import OblivionPath
+from .utils.parser import OblivionPath, Oblivion, length
 from .utils.encryptor import encrypt_aes_key, encrypt_message
 from .utils.decryptor import decrypt_aes_key, decrypt_message
 from .utils.generator import generate_key_pair
-from .utils.parser import length
 
 from . import exceptions
 
 import socket
-
+import abc
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models`日志 """
@@ -131,6 +128,23 @@ class Hook:
         tcp.close()
 
 
+class Connection:
+    def __init__(self) -> None:
+        ...
+
+    @abc.abstractmethod
+    def prepare():
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def response():
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def listen():
+        raise NotImplementedError
+
+
 class Server:
     def __init__(
         self,
@@ -151,33 +165,37 @@ class Server:
         self.tcp.bind((self.host, self.port))
         self.tcp.listen(self.max_connections)
 
+    def wait_header(self):
+        private_key, public_key = generate_key_pair()
+
+        client_socket, client_address = self.tcp.accept() # 等待客户端连接
+        client_socket.sendall(public_key) # 发送公钥
+
+        len_encrypted_aes_key = int(client_socket.recv(4).decode()) # 捕获AES_KEY长度
+        encrypted_aes_key = client_socket.recv(len_encrypted_aes_key) # 捕获AES_KEY
+        decrypted_aes_key = decrypt_aes_key(encrypted_aes_key, private_key) # 使用RSA私钥解密AES密钥
+
+        len_ciphertext = int(client_socket.recv(4).decode()) # 捕获加密文本长度
+        response = client_socket.recv(len_ciphertext) # 捕获加密文本
+        len_nonce = int(client_socket.recv(4).decode()) # 捕获nonce长度
+        nonce = client_socket.recv(len_nonce) # 捕获nonce
+
+        header = decrypt_message(response, None, decrypted_aes_key, nonce) # 使用AES解密消息
+
+        logger.debug(f"Header: {header}")
+        return header, client_socket, client_address
+
     def run(self):
         self.prepare()
 
-        # --------------------
         while True:
-            private_key, public_key = generate_key_pair()
+            header, client_tcp, client_address = self.wait_header()
 
-            client_socket, client_address = self.tcp.accept() # 等待客户端连接
-            client_socket.sendall(public_key) # 发送公钥
-
-            len_encrypted_aes_key = int(client_socket.recv(4).decode()) # 捕获AES_KEY长度
-            encrypted_aes_key = client_socket.recv(len_encrypted_aes_key) # 捕获AES_KEY
-            decrypted_aes_key = decrypt_aes_key(encrypted_aes_key, private_key) # 使用RSA私钥解密AES密钥
-
-            len_ciphertext = int(client_socket.recv(4).decode()) # 捕获加密文本长度
-            response = client_socket.recv(len_ciphertext) # 捕获加密文本
-            len_nonce = int(client_socket.recv(4).decode()) # 捕获nonce长度
-            nonce = client_socket.recv(len_nonce) # 捕获nonce
-
-            header = decrypt_message(response, None, decrypted_aes_key, nonce) # 使用AES解密消息
-
-            logger.debug(f"Header: {header}")
             for hook in self.hooks:
-                logger.debug(f"Check Hook: {hook.olps}")
+                logger.debug(f"Checking Hook: {hook.olps}")
                 if hook == header:
-                    hook.prepare(client_socket)
-                    hook.response(client_socket)
+                    hook.prepare(client_tcp)
+                    hook.response(client_tcp)
 
                     print(f"Oblivion/1.0 From {client_address} {hook.olps} 200")
                     break
@@ -185,8 +203,8 @@ class Server:
             if hook == header:
                 continue
 
-            self.not_found.prepare(client_socket)
-            self.not_found.response(client_socket)
+            self.not_found.prepare(client_tcp)
+            self.not_found.response(client_tcp)
             print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
 
 

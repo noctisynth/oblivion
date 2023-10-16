@@ -17,8 +17,6 @@ def length(string):
 
 class OblivionPath:
     def __init__(self, obl_str) -> None:
-        # search = re.match(r'(?:oblivion://|.*?://)?([^:/]+)(?::(\d+))?(/.*)?', obl_str)
-        # ^(?:(oblivion|.*?)://)?(.*):?(\d+)?(/.*)?$
         pattern = r'^(?P<protocol>oblivion)?(?:://)?(?P<host>[^:/]+)(:(?P<port>\d+))?(?P<url>/.+)?$'
         match = re.match(pattern, obl_str)
 

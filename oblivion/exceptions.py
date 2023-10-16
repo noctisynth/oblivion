@@ -12,3 +12,19 @@ class ConnectionRefusedError(RequestException, ConnectionRefusedError):
 
 class InvalidOblivion(RequestException, ValueError):
     """ Oblivion地址不合法 """
+
+
+class AdressAlreadyInUse(RequestException):
+    """ 绑定地址被占用 """
+
+
+class UnexceptedDisconnection(RequestException):
+    """ 意外与远程端断开连接 """
+
+
+class BadBytes(RequestException):
+    """ 错误的连接协议 """
+
+
+class ConnectTimedOut(RequestException):
+    """ 响应超时 """
