@@ -1,6 +1,8 @@
 from multilogging import multilogger
-from typing import List
+from typing import List, Tuple, NoReturn
 from Crypto import Random
+
+from ._models import Connection
 
 from .utils.parser import OblivionPath, Oblivion, length
 from .utils.encryptor import encrypt_aes_key, encrypt_message
@@ -10,10 +12,50 @@ from .utils.generator import generate_key_pair
 from . import exceptions
 
 import socket
-import abc
+
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models`日志 """
+
+
+class ServerConnection(Connection):
+    def __init__(self, tcp: socket.socket) -> None:
+        super().__init__()
+        self.tcp = tcp
+        self.client = None
+
+    def prepare(self):
+        pass
+
+    def listen(self):
+        self.private_key, self.public_key = generate_key_pair()
+        self.client, self.client_address = self.tcp.accept() # 等待客户端连接
+        return self.client, self.client_address
+
+    def handshake(self) -> bytes:
+        self.client.sendall(self.public_key) # 发送公钥
+        len_encrypted_aes_key = int(self.client.recv(4).decode()) # 捕获AES_KEY长度
+        encrypted_aes_key = self.client.recv(len_encrypted_aes_key) # 捕获AES_KEY
+        self.client_aes_key = decrypt_aes_key(encrypted_aes_key, self.private_key) # 使用RSA私钥解密AES密钥
+        return self.client_aes_key
+
+    def recv(self) -> Tuple[bytes, bytes]:
+        len_ciphertext = int(self.client.recv(4).decode()) # 捕获加密文本长度
+        self.request_data = self.client.recv(len_ciphertext) # 捕获加密文本
+        len_nonce = int(self.client.recv(4).decode()) # 捕获nonce长度
+        self.nonce = self.client.recv(len_nonce) # 捕获nonce
+        return self.request_data, self.nonce
+
+    def response(self):
+        pass
+
+    def solve(self) -> str:
+        if not self.client:
+            raise NotImplementedError
+
+        self.handshake()
+        self.recv()
+        return decrypt_message(self.request_data, None, self.client_aes_key, self.nonce) # 使用AES解密消息
 
 
 class Request:
@@ -128,23 +170,6 @@ class Hook:
         tcp.close()
 
 
-class Connection:
-    def __init__(self) -> None:
-        ...
-
-    @abc.abstractmethod
-    def prepare():
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def response():
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def listen():
-        raise NotImplementedError
-
-
 class Server:
     def __init__(
         self,
@@ -160,36 +185,19 @@ class Server:
         self.hooks: List[Hook] = hooks
         self.not_found = Hook("/404", data=not_found)
 
-    def prepare(self):
+    def prepare(self) -> socket.socket:
         self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp.bind((self.host, self.port))
         self.tcp.listen(self.max_connections)
+        return self.tcp
 
-    def wait_header(self):
-        private_key, public_key = generate_key_pair()
-
-        client_socket, client_address = self.tcp.accept() # 等待客户端连接
-        client_socket.sendall(public_key) # 发送公钥
-
-        len_encrypted_aes_key = int(client_socket.recv(4).decode()) # 捕获AES_KEY长度
-        encrypted_aes_key = client_socket.recv(len_encrypted_aes_key) # 捕获AES_KEY
-        decrypted_aes_key = decrypt_aes_key(encrypted_aes_key, private_key) # 使用RSA私钥解密AES密钥
-
-        len_ciphertext = int(client_socket.recv(4).decode()) # 捕获加密文本长度
-        response = client_socket.recv(len_ciphertext) # 捕获加密文本
-        len_nonce = int(client_socket.recv(4).decode()) # 捕获nonce长度
-        nonce = client_socket.recv(len_nonce) # 捕获nonce
-
-        header = decrypt_message(response, None, decrypted_aes_key, nonce) # 使用AES解密消息
-
-        logger.debug(f"Header: {header}")
-        return header, client_socket, client_address
-
-    def run(self):
-        self.prepare()
+    def run(self) -> NoReturn:
+        connection = ServerConnection(self.prepare())
+        connection.prepare()
 
         while True:
-            header, client_tcp, client_address = self.wait_header()
+            client_tcp, client_address = connection.listen()
+            header = connection.solve()
 
             for hook in self.hooks:
                 logger.debug(f"Checking Hook: {hook.olps}")
