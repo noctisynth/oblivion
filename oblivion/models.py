@@ -44,7 +44,11 @@ class ServerConnection(Connection):
         self.request_data = self.client.recv(len_ciphertext) # 捕获加密文本
         len_nonce = int(self.client.recv(4).decode()) # 捕获nonce长度
         self.nonce = self.client.recv(len_nonce) # 捕获nonce
-        return self.request_data, self.nonce
+        logger.debug(f"捕获到nonce: {self.nonce}")
+        len_tag = int(self.client.recv(4).decode()) # 捕获tag长度
+        self.tag = self.client.recv(len_tag) # 捕获tag
+        logger.debug(f"捕获到tag: {self.tag}")
+        return self.request_data, self.tag, self.nonce
 
     def response(self):
         pass
@@ -55,7 +59,7 @@ class ServerConnection(Connection):
 
         self.handshake()
         self.recv()
-        return decrypt_message(self.request_data, None, self.client_aes_key, self.nonce) # 使用AES解密消息
+        return decrypt_message(self.request_data, self.tag, self.client_aes_key, self.nonce) # 使用AES解密消息
 
 
 class Request:
@@ -99,7 +103,7 @@ class Request:
         if not self.prepared:
             self.prepare()
 
-        ciphertext, _, nonce = encrypt_message(self.plain_text, self.aes_key) # 使用AES加密请求头
+        ciphertext, tag, nonce = encrypt_message(self.plain_text, self.aes_key) # 使用AES加密请求头
 
         # 发送完整请求
         logger.debug(f"请求地址: {self.olps}")
@@ -107,8 +111,14 @@ class Request:
         self.tcp.sendall(ciphertext)
 
         # 发送nonce
+        logger.debug(f"发送nonce: {nonce}")
         self.tcp.sendall(length(nonce))
         self.tcp.sendall(nonce)
+
+        # 发送tag
+        logger.debug(f"发送tag: {tag}")
+        self.tcp.sendall(length(tag))
+        self.tcp.sendall(tag)
 
     def recv(self):
         if not self.prepared:
@@ -128,7 +138,10 @@ class Request:
         len_nonce = int(self.tcp.recv(4).decode()) # 捕获nonce长度
         nonce = self.tcp.recv(len_nonce) # 捕获nonce
 
-        self.data = decrypt_message(encrypted_data, None, decrypted_aes_key, nonce) # 使用AES解密应答
+        len_tag = int(self.tcp.recv(4).decode()) # 捕获tag长度
+        tag = self.tcp.recv(len_tag) # 捕获tag
+
+        self.data = decrypt_message(encrypted_data, tag, decrypted_aes_key, nonce) # 使用AES解密应答
 
         return self.data
 
@@ -157,7 +170,7 @@ class Hook:
         tcp.sendall(self.encrypted_aes_key) # 发送AES_KEY
 
     def response(self, tcp: socket.socket):
-        response, _, nonce = encrypt_message(self.data, self.aes_key) # 使用AES加密应答
+        response, tag, nonce = encrypt_message(self.data, self.aes_key) # 使用AES加密应答
 
         # 发送完整应答
         tcp.sendall(length(response))
@@ -166,6 +179,10 @@ class Hook:
         # 发送nonce
         tcp.sendall(length(nonce))
         tcp.sendall(nonce)
+
+        # 发送tag
+        tcp.sendall(length(tag))
+        tcp.sendall(tag)
 
         tcp.close()
 
