@@ -14,7 +14,7 @@ class InvalidOblivion(RequestException, ValueError):
     """ Oblivion地址不合法 """
 
 
-class AdressAlreadyInUse(RequestException):
+class AddressAlreadyInUse(RequestException):
     """ 绑定地址被占用 """
 
 

@@ -33,6 +33,7 @@ class ServerConnection(Connection):
         return self.client, self.client_address
 
     def handshake(self) -> bytes:
+        self.client.sendall(length(self.public_key)) # 发送公钥长度
         self.client.sendall(self.public_key) # 发送公钥
         len_encrypted_aes_key = int(self.client.recv(4).decode()) # 捕获AES_KEY长度
         encrypted_aes_key = self.client.recv(len_encrypted_aes_key) # 捕获AES_KEY
@@ -89,13 +90,14 @@ class Request:
         except ConnectionRefusedError:
             raise exceptions.ConnectionRefusedError("向服务端的链接请求被拒绝, 可能是服务端由于宕机.")
 
-        self.server_public_key = self.tcp.recv(1024)
-        logger.debug(f"接收到的公钥: {self.server_public_key.decode()}")
+        len_server_public_key = int(self.tcp.recv(4).decode())
+        server_public_key = self.tcp.recv(len_server_public_key)
+        logger.debug(f"接收到的公钥: {server_public_key.decode()}")
 
         self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
-        self.encrypted_aes_key = encrypt_aes_key(self.aes_key, self.server_public_key) # 使用RSA公钥加密AES密钥
-        self.tcp.sendall(length(self.encrypted_aes_key)) # 发送AES_KEY长度
-        self.tcp.sendall(self.encrypted_aes_key) # 发送AES_KEY
+        encrypted_aes_key = encrypt_aes_key(self.aes_key, server_public_key) # 使用RSA公钥加密AES密钥
+        self.tcp.sendall(length(encrypted_aes_key)) # 发送AES_KEY长度
+        self.tcp.sendall(encrypted_aes_key) # 发送AES_KEY
 
         self.prepared = True
 
@@ -125,6 +127,7 @@ class Request:
             raise NotImplementedError
 
         private_key, public_key = generate_key_pair()
+        self.tcp.sendall(length(public_key)) # 发送本地公钥长度
         self.tcp.sendall(public_key) # 发送本地公钥
 
         len_encrypted_aes_key = int(self.tcp.recv(4).decode()) # 捕获AES_KEY长度
@@ -160,7 +163,8 @@ class Hook:
         return self.olps.rstrip("/") == olps.rstrip("/")
 
     def prepare(self, tcp: socket.socket):
-        client_public_key = tcp.recv(1024) # 从客户端获得公钥
+        len_client_public_key = int(tcp.recv(4).decode()) # 从客户端获得公钥长度
+        client_public_key = tcp.recv(len_client_public_key) # 从客户端获得公钥
         logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
 
         self.aes_key = Random.get_random_bytes(16) # 生成随机的AES密钥
