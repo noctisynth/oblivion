@@ -1,11 +1,13 @@
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
+from Crypto import Random
 
 import Crypto.Hash.SHA256
 
 def encrypt_message(message: str, aes_key: bytes):
     """ 使用AES加密消息 """
-    cipher = AES.new(aes_key, AES.MODE_GCM)
+    nonce = Random.get_random_bytes(12)
+    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
     ciphertext, tag = cipher.encrypt_and_digest(message.encode())
     return ciphertext, tag, cipher.nonce
 
