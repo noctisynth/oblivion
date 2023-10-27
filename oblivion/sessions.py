@@ -1,5 +1,5 @@
 from multilogging import multilogger
-from .models import Request
+from .models.client import Request
 
 
 logger = multilogger(name="Oblivion", payload="sessions")
