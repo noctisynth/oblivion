@@ -13,19 +13,14 @@ class Session:
     def __repr__(self) -> str:
         return "<Session [Oblivion]>"
 
-    def request(
-        self,
-        method,
-        olps,
-        **kwargs
-    ):
+    def request(self, method: str, olps: str):
         # 创建请求
         logger.debug(f"创建请求: {olps}")
         req = Request(method=method, olps=olps)
         req.prepare()
         return self.send(request=req)
 
-    def send(self: "Session"=None, request: Request=None):
+    def send(self, request: Request = None) -> str:
         if not request.prepared:
             request.prepare()
 
@@ -33,16 +28,8 @@ class Session:
         request.send()
         return request.recv()
 
-    def get(
-        self,
-        olps,
-        **kwargs
-    ):
-        return self.request("GET", olps, **kwargs)
+    def get(self, olps) -> str:
+        return self.request("GET", olps)
 
-    def post(
-        self,
-        olps,
-        **kwargs
-    ):
-        return self.request("POST", olps, **kwargs)
+    def post(self, olps) -> str:
+        return self.request("POST", olps)
