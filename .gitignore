@@ -1,5 +1,7 @@
-test*
 __pycache__/
-setup.py
 dist/
+build/
 *.egg-info/
+setup.py
+pack.bat
+test*
