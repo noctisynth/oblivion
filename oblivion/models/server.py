@@ -87,6 +87,7 @@ class ServerConnection(BaseConnection):
 
 class AsyncServerConnection(BaseConnection):
     tcp: Stream
+    client_address: Tuple[str, int]
 
     def __init__(self) -> None:
         super().__init__()
@@ -97,6 +98,8 @@ class AsyncServerConnection(BaseConnection):
     async def handshake(self) -> None:
         len_header = int((await self.tcp.recv(4)).decode())
         self.request = OblivionRequest((await self.tcp.recv(len_header)).decode())  # 接收请求头
+        self.request.remote_addr = self.client_address[0]
+        self.request.remote_port = self.client_address[1]
 
         if self.request.method == "POST":
             await self.tcp.sendall(length(self.public_key))  # 发送公钥长度
@@ -134,7 +137,7 @@ class AsyncServerConnection(BaseConnection):
     async def response(self) -> None:
         pass
 
-    async def solve(self) -> str:
+    async def solve(self) -> OblivionRequest:
         if not self.tcp:
             raise NotImplementedError
 
@@ -366,6 +369,7 @@ class AsyncServer:
         peername = writer.get_extra_info('peername')
         stream = Stream(reader, writer)
         self.connection.tcp = stream
+        self.connection.client_address = peername
         await self.connection.prepare()
         request = await self.connection.solve()
 
@@ -376,7 +380,7 @@ class AsyncServer:
                 await hook.response(stream, request)
 
                 print(
-                    f"Oblivion/1.0 From {peername[0]} {hook.olps} 200"
+                    f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 200"
                 )
                 return
 
@@ -385,7 +389,7 @@ class AsyncServer:
 
         await self.not_found.prepare(stream)
         await self.not_found.response(stream, request)
-        print(f"Oblivion/1.0 From {peername[0]} {hook.olps} 404")
+        print(f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 404")
 
     async def _run(self) -> NoReturn:
         await self.prepare()
