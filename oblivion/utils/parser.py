@@ -62,6 +62,8 @@ class OblivionRequest:
     data: str
     plain_text: str
     POST: dict
+    remote_addr: dict
+    remote_port: int
 
     def __init__(self, header: str = None) -> None:
         self.plain_text = header

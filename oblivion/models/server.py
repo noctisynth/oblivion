@@ -34,6 +34,8 @@ class ServerConnection(BaseConnection):
     def handshake(self) -> None:
         len_header = int(self.client.recv(4).decode())
         self.request = OblivionRequest(self.client.recv(len_header).decode())  # 接收请求头
+        self.request.remote_addr = self.client_address[0]
+        self.request.remote_port = self.client_address[1]
 
         if self.request.method == "POST":
             self.client.sendall(length(self.public_key))  # 发送公钥长度
