@@ -110,4 +110,5 @@ class Stream:
         return await self.writer.drain()
 
     async def close(self):
-        return self.writer.close()
+        self.writer.close()
+        await self.writer.wait_closed()

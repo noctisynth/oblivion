@@ -51,6 +51,7 @@ class ServerConnection(BaseConnection):
                     self.request_data, self.tag, self.client_aes_key, self.nonce
                 )
             )  # 使用AES解密消息
+            self.request.POST = self.data
         elif self.request.method == "GET":
             pass
         else:
@@ -97,7 +98,9 @@ class AsyncServerConnection(BaseConnection):
 
     async def handshake(self) -> None:
         len_header = int((await self.tcp.recv(4)).decode())
-        self.request = OblivionRequest((await self.tcp.recv(len_header)).decode())  # 接收请求头
+        self.request = OblivionRequest(
+            (await self.tcp.recv(len_header)).decode()
+        )  # 接收请求头
         self.request.remote_addr = self.client_address[0]
         self.request.remote_port = self.client_address[1]
 
@@ -213,7 +216,7 @@ class AsyncHook(BaseHook):
         await tcp.sendall(length(self.encrypted_aes_key))  # 发送AES_KEY长度
         await tcp.sendall(self.encrypted_aes_key)  # 发送AES_KEY
 
-    async def response(self, tcp: socket.socket, request: OblivionRequest) -> None:
+    async def response(self, tcp: Stream, request: OblivionRequest) -> None:
         if callable(self.res):
             plaintext = self.res(request)
         else:
@@ -285,6 +288,21 @@ class Hooks(list[Hook | AsyncHook]):
         return wrapper
 
 
+from threading import Thread
+from typing import List
+
+
+class ThreadPool:
+    threads: List[Thread] = []
+
+    def new(self, func):
+        thread = Thread(target=func)
+        thread.daemon = True
+        thread.start()
+        self.threads.append(thread)
+        return thread
+
+
 class Server:
     def __init__(
         self,
@@ -299,6 +317,7 @@ class Server:
         self.max_connections = max_connection
         self.hooks: Hooks = hooks
         self.not_found = Hook("/404", res=not_found)
+        self.threadpool = ThreadPool()
 
     def prepare(self) -> socket.socket:
         print("Performing system checks...\n")
@@ -309,29 +328,32 @@ class Server:
         print("Quit the server by close the window.")
         return self.tcp
 
+    def handle(self, client_tcp, client_address):
+        request = self.connection.solve()
+
+        for hook in self.hooks:
+            logger.debug(f"Checking Hook: {hook.olps}")
+            if hook.is_valid_header(request):
+                hook.prepare(client_tcp)
+                hook.response(client_tcp, request)
+
+                print(f"Oblivion/1.0 From {client_address[0]} {hook.olps} 200")
+                break
+
+        if hook.is_valid_header(request):
+            return
+
+        self.not_found.prepare(client_tcp)
+        self.not_found.response(client_tcp)
+        print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
+
     def _run(self) -> NoReturn:
-        connection = ServerConnection(self.prepare())
-        connection.prepare()
+        self.connection = ServerConnection(self.prepare())
+        self.connection.prepare()
 
         while True:
-            client_tcp, client_address = connection.listen()
-            request = connection.solve()
-
-            for hook in self.hooks:
-                logger.debug(f"Checking Hook: {hook.olps}")
-                if hook.is_valid_header(request):
-                    hook.prepare(client_tcp)
-                    hook.response(client_tcp, request)
-
-                    print(f"Oblivion/1.0 From {client_address[0]} {hook.olps} 200")
-                    break
-
-            if hook.is_valid_header(request):
-                continue
-
-            self.not_found.prepare(client_tcp)
-            self.not_found.response(client_tcp)
-            print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
+            client_tcp, client_address = self.connection.listen()
+            self.threadpool.new(lambda: self.handle(client_tcp, client_address))
 
     def run(self):
         try:
@@ -366,7 +388,7 @@ class AsyncServer:
     async def handle(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> bool:
-        peername = writer.get_extra_info('peername')
+        peername = writer.get_extra_info("peername")
         stream = Stream(reader, writer)
         self.connection.tcp = stream
         self.connection.client_address = peername
@@ -390,15 +412,24 @@ class AsyncServer:
         await self.not_found.prepare(stream)
         await self.not_found.response(stream, request)
         print(f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 404")
+        await stream.close()
 
     async def _run(self) -> NoReturn:
         await self.prepare()
 
         async with self.tcp:
             try:
-                await self.tcp.serve_forever()
+                # self.tcp.serve_forever
+                await asyncio.gather(self.tcp.serve_forever())
             except KeyboardInterrupt:
                 return
+        # async with self.tcp:
+        #     await asyncio.gather(self.tcp.start_serving())
+
+        # try:
+        #     await asyncio.Event().wait()  # 保持事件循环运行，直到手动停止
+        # except KeyboardInterrupt:
+        #     pass
 
     def run(self):
         try:
