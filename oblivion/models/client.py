@@ -17,8 +17,8 @@ logger = multilogger(name="Oblivion", payload="models.client")
 
 
 class Request(BaseRequest):
-    def __init__(self, method: str = None, olps: str = None) -> None:
-        super().__init__(method, olps)
+    def __init__(self, method: str = None, olps: str = None, data: dict = None) -> None:
+        super().__init__(method, olps, data)
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}] {self.olps}>"
@@ -63,10 +63,9 @@ class Request(BaseRequest):
 
         if not self.prepared:
             self.prepare()
-        if not self.data:
-            self.data = json.dumps({})
 
-        ciphertext, tag, nonce = encrypt_message(self.data, self.aes_key)  # 使用AES加密请求头
+        self.data = json.dumps(self.data) if self.data else json.dumps({})
+        ciphertext, tag, nonce = encrypt_message(self.data, self.aes_key)  # 使用AES加密附加数据
 
         # 发送完整请求
         logger.debug(f"请求地址: {self.olps}")

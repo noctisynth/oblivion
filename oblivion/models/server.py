@@ -106,12 +106,13 @@ class AsyncServerConnection(BaseConnection):
             self.client_aes_key = decrypt_aes_key(
                 encrypted_aes_key, self.private_key
             )  # 使用RSA私钥解密AES密钥
-            self.recv()
+            await self.recv()
             self.data = json.loads(
                 decrypt_message(
                     self.request_data, self.tag, self.client_aes_key, self.nonce
                 )
             )  # 使用AES解密消息
+            self.request.POST = self.data
         elif self.request.method == "GET":
             pass
         else:

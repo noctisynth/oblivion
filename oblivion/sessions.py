@@ -13,10 +13,10 @@ class Session:
     def __repr__(self) -> str:
         return "<Session [Oblivion]>"
 
-    def request(self, method: str, olps: str):
+    def request(self, method: str, olps: str, data: dict = None):
         # 创建请求
         logger.debug(f"创建请求: {olps}")
-        req = Request(method=method, olps=olps)
+        req = Request(method=method, olps=olps, data=data)
         req.prepare()
         return self.send(request=req)
 

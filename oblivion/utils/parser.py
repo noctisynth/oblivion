@@ -61,6 +61,7 @@ class OblivionRequest:
     version: str
     data: str
     plain_text: str
+    POST: dict
 
     def __init__(self, header: str = None) -> None:
         self.plain_text = header

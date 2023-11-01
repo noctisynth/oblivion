@@ -40,13 +40,14 @@ class BaseRequest:
         self,
         method: str = None,
         olps: str = None,
+        data: dict = None,
     ) -> None:
         self.method = method.upper()
         self.path = OblivionPath(olps)
         self.olps = self.path.olps
         self.oblivion = Oblivion(method=method, olps=self.olps)
         self.plain_text = self.oblivion.plain_text
-        self.data = None
+        self.data = data
         self.prepared = False
 
     @abc.abstractmethod
