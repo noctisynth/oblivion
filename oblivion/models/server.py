@@ -12,7 +12,6 @@ import socket
 import json
 import asyncio
 
-
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
 
@@ -157,7 +156,7 @@ class AsyncServerConnection(BaseConnection):
 
 class Hook(BaseHook):
     def __init__(
-        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
+            self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
     ) -> None:
         super().__init__(olps, res, handle, method)
 
@@ -199,7 +198,7 @@ class Hook(BaseHook):
 
 class AsyncHook(BaseHook):
     def __init__(
-        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
+            self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
     ) -> None:
         super().__init__(olps, res, handle, method)
 
@@ -305,12 +304,12 @@ class ThreadPool:
 
 class Server:
     def __init__(
-        self,
-        host="0.0.0.0",
-        port=80,
-        max_connection=5,
-        hooks=[],
-        not_found="404 Not Found",
+            self,
+            host="0.0.0.0",
+            port=80,
+            max_connection=5,
+            hooks=[],
+            not_found="404 Not Found",
     ) -> None:
         self.host = host
         self.port = port
@@ -364,18 +363,19 @@ class Server:
 
 class AsyncServer:
     def __init__(
-        self,
-        host="0.0.0.0",
-        port=80,
-        max_connection=5,
-        hooks=[],
-        not_found="404 Not Found",
+            self,
+            host="0.0.0.0",
+            port=80,
+            max_connection=5,
+            hooks=[],
+            not_found="404 Not Found",
     ) -> None:
         self.host = host
         self.port = port
         self.max_connections = max_connection
         self.hooks: Hooks = hooks
         self.not_found = AsyncHook("/404", res=not_found)
+        self.lock = asyncio.Lock()
 
     async def prepare(self) -> socket.socket:
         print("Performing system checks...\n")
@@ -386,7 +386,7 @@ class AsyncServer:
         return self.tcp
 
     async def handle(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> bool:
         peername = writer.get_extra_info("peername")
         stream = Stream(reader, writer)
@@ -395,16 +395,17 @@ class AsyncServer:
         await self.connection.prepare()
         request = await self.connection.solve()
 
-        for hook in self.hooks:
-            logger.debug(f"Checking Hook: {hook.olps}")
-            if hook.is_valid_header(request):
-                await hook.prepare(stream)
-                await hook.response(stream, request)
+        async with self.lock:
+            for hook in self.hooks:
+                logger.debug(f"Checking Hook: {hook.olps}")
+                if hook.is_valid_header(request):
+                    await hook.prepare(stream)
+                    await hook.response(stream, request)
 
-                print(
-                    f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 200"
-                )
-                return
+                    print(
+                        f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 200"
+                    )
+                    return
 
         if hook.is_valid_header(request):
             return
@@ -415,12 +416,10 @@ class AsyncServer:
         await stream.close()
 
     async def _run(self) -> NoReturn:
-        await self.prepare()
-
         async with self.tcp:
             try:
                 # self.tcp.serve_forever
-                await asyncio.gather(self.tcp.serve_forever())
+                await self.tcp.serve_forever()
             except KeyboardInterrupt:
                 return
         # async with self.tcp:
@@ -432,10 +431,13 @@ class AsyncServer:
         #     pass
 
     def run(self):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.prepare())
+        loop.create_task(self._run())
         try:
-            asyncio.run(self._run())
+            loop.run_forever()
         except KeyboardInterrupt:
-            return
+            pass
 
 
 if __name__ == "__main__":

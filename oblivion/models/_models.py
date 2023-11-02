@@ -7,7 +7,7 @@ import asyncio
 
 class BaseConnection:
     @abc.abstractmethod
-    def prepare():
+    def prepare(self):
         raise NotImplementedError
 
     @abc.abstractmethod
