@@ -95,6 +95,24 @@ class BaseHook:
         return header.olps == self.olps.rstrip("/")
 
 
+class OblivionPackage:
+    """Oblivion Package Basic Class"""
+
+    length: bytes
+
+    def __init__(self, **kwargs) -> None:
+        for key, value in kwargs.items():
+            self.__setattr__(key, value)
+
+    def __repr__(self) -> str:
+        return f"<{self.__name__} {self.plain_data[:8]}>"
+
+    @property
+    @abc.abstractmethod
+    def plain_data(self) -> bytes:
+        raise NotImplementedError
+
+
 class Stream:
     def __init__(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter

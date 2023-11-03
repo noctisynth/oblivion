@@ -2,6 +2,7 @@ from multilogging import multilogger
 from typing import Tuple, NoReturn, Callable, Any
 
 from ._models import BaseConnection, BaseHook, Stream
+from .package import OEA, OED
 
 from ..utils.parser import Oblivion, OblivionRequest, length
 from ..utils.encryptor import encrypt_aes_key, encrypt_message
@@ -61,10 +62,8 @@ class ServerConnection(BaseConnection):
         self.request_data = self.client.recv(len_ciphertext)  # 捕获加密文本
         len_nonce = int(self.client.recv(4).decode())  # 捕获nonce长度
         self.nonce = self.client.recv(len_nonce)  # 捕获nonce
-        logger.debug(f"捕获到nonce: {self.nonce}")
         len_tag = int(self.client.recv(4).decode())  # 捕获tag长度
         self.tag = self.client.recv(len_tag)  # 捕获tag
-        logger.debug(f"捕获到tag: {self.tag}")
         return self.request_data, self.tag, self.nonce
 
     def response(self) -> None:
@@ -156,7 +155,7 @@ class AsyncServerConnection(BaseConnection):
 
 class Hook(BaseHook):
     def __init__(
-            self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
+        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
     ) -> None:
         super().__init__(olps, res, handle, method)
 
@@ -179,26 +178,14 @@ class Hook(BaseHook):
         else:
             plaintext = self.res
 
-        response, tag, nonce = encrypt_message(plaintext, self.aes_key)  # 使用AES加密应答
-
-        # 发送完整应答
-        tcp.sendall(length(response))
-        tcp.sendall(response)
-
-        # 发送nonce
-        tcp.sendall(length(nonce))
-        tcp.sendall(nonce)
-
-        # 发送tag
-        tcp.sendall(length(tag))
-        tcp.sendall(tag)
-
+        oed = OED(AES_KEY=self.aes_key)
+        tcp.sendall(oed.from_json_or_string(plaintext).plain_data)
         tcp.close()
 
 
 class AsyncHook(BaseHook):
     def __init__(
-            self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
+        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
     ) -> None:
         super().__init__(olps, res, handle, method)
 
@@ -221,20 +208,8 @@ class AsyncHook(BaseHook):
         else:
             plaintext = self.res
 
-        response, tag, nonce = encrypt_message(plaintext, self.aes_key)  # 使用AES加密应答
-
-        # 发送完整应答
-        await tcp.sendall(length(response))
-        await tcp.sendall(response)
-
-        # 发送nonce
-        await tcp.sendall(length(nonce))
-        await tcp.sendall(nonce)
-
-        # 发送tag
-        await tcp.sendall(length(tag))
-        await tcp.sendall(tag)
-
+        oed = OED(AES_KEY=self.aes_key)
+        await tcp.sendall(oed.from_json_or_string(plaintext).plain_data)
         await tcp.close()
 
 
@@ -304,17 +279,17 @@ class ThreadPool:
 
 class Server:
     def __init__(
-            self,
-            host="0.0.0.0",
-            port=80,
-            max_connection=5,
-            hooks=[],
-            not_found="404 Not Found",
+        self,
+        host="0.0.0.0",
+        port=80,
+        max_connection=5,
+        hooks=[],
+        not_found="404 Not Found",
     ) -> None:
         self.host = host
         self.port = port
         self.max_connections = max_connection
-        self.hooks: Hooks = hooks
+        self.hooks: Hooks = tuple(hooks)
         self.not_found = Hook("/404", res=not_found)
         self.threadpool = ThreadPool()
 
@@ -363,21 +338,21 @@ class Server:
 
 class AsyncServer:
     def __init__(
-            self,
-            host="0.0.0.0",
-            port=80,
-            max_connection=5,
-            hooks=[],
-            not_found="404 Not Found",
+        self,
+        host="0.0.0.0",
+        port=80,
+        max_connection=5,
+        hooks=[],
+        not_found="404 Not Found",
     ) -> None:
         self.host = host
         self.port = port
         self.max_connections = max_connection
-        self.hooks: Hooks = hooks
+        self.hooks: Hooks = tuple(hooks)
         self.not_found = AsyncHook("/404", res=not_found)
         self.lock = asyncio.Lock()
 
-    async def prepare(self) -> socket.socket:
+    async def prepare(self) -> Stream:
         print("Performing system checks...\n")
         self.tcp = await asyncio.start_server(self.handle, self.host, self.port)
         self.connection = AsyncServerConnection()
@@ -386,7 +361,7 @@ class AsyncServer:
         return self.tcp
 
     async def handle(
-            self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> bool:
         peername = writer.get_extra_info("peername")
         stream = Stream(reader, writer)
@@ -395,17 +370,16 @@ class AsyncServer:
         await self.connection.prepare()
         request = await self.connection.solve()
 
-        async with self.lock:
-            for hook in self.hooks:
-                logger.debug(f"Checking Hook: {hook.olps}")
-                if hook.is_valid_header(request):
-                    await hook.prepare(stream)
-                    await hook.response(stream, request)
+        for hook in self.hooks:
+            logger.debug(f"Checking Hook: {hook.olps}")
+            if hook.is_valid_header(request):
+                await hook.prepare(stream)
+                await hook.response(stream, request)
 
-                    print(
-                        f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 200"
-                    )
-                    return
+                print(
+                    f"Oblivion/1.0 {request.method} From {peername[0]} {request.olps} 200"
+                )
+                return
 
         if hook.is_valid_header(request):
             return
