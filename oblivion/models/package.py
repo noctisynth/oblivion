@@ -41,7 +41,7 @@ class OED(OblivionPackage):
         return self
 
     def from_dict(self, __dict: dict) -> "OED":
-        self.DATA = encrypt_message(json.dumps(__dict))
+        self.DATA, self.TAG, self.NONCE = encrypt_message(json.dumps(__dict), self.AES_KEY)
         return self
 
     def from_encrypted_data(self, __data: bytes) -> "OED":

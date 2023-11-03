@@ -12,14 +12,37 @@ from ..utils.generator import generate_key_pair, generate_aes_key
 
 import socket
 import json
+import queue
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
 
 
+class RSAKeyPairPool:
+    pairs: queue.Queue = queue.Queue()
+
+    def new(self):
+        key_pair = generate_key_pair()
+        for _ in range(5):
+            self.pairs.put(key_pair)
+
+    def get(self):
+        while True:
+            if not self.pairs.empty():
+                return self.pairs.get()
+
+    def keep_forever(self, limit: int):
+        while True:
+            if self.pairs.qsize() < limit:
+                self.new()
+
+    def size(self):
+        return self.pairs.qsize()
+
+
 class ServerConnection(BaseConnection):
-    def prepare(self) -> None:
-        self.private_key, self.public_key = generate_key_pair()
+    def __init__(self, key_pair: Tuple[bytes, bytes]) -> None:
+        self.private_key, self.public_key = key_pair
 
     def handshake(self, client: socket.socket, client_address: Tuple[str, int]) -> None:
         len_header = int(client.recv(4).decode())
@@ -56,7 +79,7 @@ class ServerConnection(BaseConnection):
         self.tag = client.recv(len_tag)  # 捕获tag
         return self.request_data, self.tag, self.nonce
 
-    def solve(self, client, client_address) -> str:
+    def solve(self, client, client_address) -> OblivionRequest:
         self.handshake(client, client_address)
         return self.request
 
@@ -128,6 +151,7 @@ class Hooks(list[Hook]):
 
 class ThreadPool:
     threads: List[Thread] = []
+    # queue: List[Thread] = []
 
     def new(self, func):
         thread = Thread(target=func)
@@ -155,11 +179,12 @@ class Server:
         self.hooks: Hooks = tuple(hooks)
         self.not_found = Hook("/404", res=not_found)
         self.threadpool = ThreadPool()
+        self.keypool = RSAKeyPairPool()
 
     def handle(
         self, client_tcp: socket.socket, client_address: Tuple[str, int]
     ) -> None:
-        connection = ServerConnection()
+        connection = ServerConnection(self.keypool.get())
         request = connection.solve(client_tcp, client_address)
 
         for hook in self.hooks:
@@ -167,8 +192,7 @@ class Server:
             if hook.is_valid_header(request):
                 hook.prepare(client_tcp)
                 hook.response(client_tcp, request)
-
-                print(f"Oblivion/1.0 From {client_address[0]} {hook.olps} 200")
+                print(f"Oblivion/1.0 {request.method} From {client_address[0]} {hook.olps} 200")
                 break
 
         if hook.is_valid_header(request):
@@ -184,6 +208,7 @@ class Server:
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp.bind((self.host, self.port))
         tcp.listen(self.max_connections)
+        self.threadpool.new(lambda: self.keypool.keep_forever(10))
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
         print("Quit the server by close the window.")
 

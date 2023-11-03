@@ -17,15 +17,15 @@ logger = multilogger(name="Oblivion", payload="models.client")
 
 
 class Request(BaseRequest):
-    def __init__(self, method: str = None, olps: str = None, data: dict = None) -> None:
-        super().__init__(method, olps, data)
+    def __init__(self, method: str = None, olps: str = None, data: dict = None, key_pair: tuple = None) -> None:
+        super().__init__(method, olps, data, key_pair)
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}] {self.olps}>"
 
     def prepare(self) -> None:
         self.aes_key = generate_aes_key()  # 生成随机的AES密钥
-        self.private_key, self.public_key = generate_key_pair()
+        self.private_key, self.public_key = self.key_pair if self.key_pair else generate_key_pair()
 
         try:
             self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

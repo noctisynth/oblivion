@@ -7,16 +7,15 @@ logger = multilogger(name="Oblivion", payload="sessions")
 
 
 class Session:
-    def __init__(self) -> None:
-        ...
-
     def __repr__(self) -> str:
         return "<Session [Oblivion]>"
 
-    def request(self, method: str, olps: str, data: dict = None):
+    def request(
+        self, method: str, olps: str, data: dict = None, key_pair: tuple = None
+    ):
         # 创建请求
         logger.debug(f"创建请求: {olps}")
-        req = Request(method=method, olps=olps, data=data)
+        req = Request(method=method, olps=olps, data=data, key_pair=key_pair)
         req.prepare()
         return self.send(request=req)
 

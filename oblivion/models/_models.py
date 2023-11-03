@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Tuple
 from ..utils.parser import Oblivion, OblivionPath, OblivionRequest
 
 import abc
@@ -40,6 +40,7 @@ class BaseRequest:
         method: str = None,
         olps: str = None,
         data: dict = None,
+        key_pair: Tuple[bytes, bytes] = None,
     ) -> None:
         self.method = method.upper()
         self.path = OblivionPath(olps)
@@ -47,6 +48,7 @@ class BaseRequest:
         self.oblivion = Oblivion(method=method, olps=self.olps)
         self.plain_text = self.oblivion.plain_text
         self.data = data
+        self.key_pair = key_pair
         self.prepared = False
 
     @abc.abstractmethod

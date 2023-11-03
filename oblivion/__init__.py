@@ -1,4 +1,4 @@
 __author__ = "苏向夜 <fu050409@google.com>"
-__version__ = "0.0.2"
+__version__ = "1.0.0"
 
 from .api import *
