@@ -2,7 +2,6 @@ from typing import Callable
 from ..utils.parser import Oblivion, OblivionPath, OblivionRequest
 
 import abc
-import asyncio
 
 
 class BaseConnection:
@@ -111,22 +110,3 @@ class OblivionPackage:
     @abc.abstractmethod
     def plain_data(self) -> bytes:
         raise NotImplementedError
-
-
-class Stream:
-    def __init__(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        self.reader = reader
-        self.writer = writer
-
-    async def recv(self, __bufsize: int):
-        return await self.reader.read(__bufsize)
-
-    async def sendall(self, __data: bytes | bytearray):
-        self.writer.write(__data)
-        return await self.writer.drain()
-
-    async def close(self):
-        self.writer.close()
-        await self.writer.wait_closed()

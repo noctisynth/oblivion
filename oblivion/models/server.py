@@ -2,17 +2,16 @@ from multilogging import multilogger
 from typing import Tuple, NoReturn, Callable, List, Any
 from threading import Thread
 
-from ._models import BaseConnection, BaseHook, Stream
+from ._models import BaseConnection, BaseHook
 from .package import OEA, OED
 
-from ..utils.parser import Oblivion, OblivionRequest, length
-from ..utils.encryptor import encrypt_aes_key, encrypt_message
+from ..utils.parser import OblivionRequest, length
+from ..utils.encryptor import encrypt_aes_key
 from ..utils.decryptor import decrypt_aes_key, decrypt_message
 from ..utils.generator import generate_key_pair, generate_aes_key
 
 import socket
 import json
-import asyncio
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
@@ -61,12 +60,6 @@ class ServerConnection(BaseConnection):
         self.handshake(client, client_address)
         return self.request
 
-    @property
-    def decrypted_message(self):
-        return decrypt_message(
-            self.request_data, self.tag, self.client_aes_key, self.nonce
-        )
-
 
 class Hook(BaseHook):
     def __init__(
@@ -77,8 +70,6 @@ class Hook(BaseHook):
     def prepare(self, tcp: socket.socket) -> None:
         len_client_public_key = int(tcp.recv(4).decode())  # 从客户端获得公钥长度
         client_public_key = tcp.recv(len_client_public_key)  # 从客户端获得公钥
-        logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
-
         self.aes_key = generate_aes_key()  # 生成随机的AES密钥
         self.encrypted_aes_key = encrypt_aes_key(
             self.aes_key, client_public_key
@@ -95,52 +86,11 @@ class Hook(BaseHook):
 
         oed = OED(AES_KEY=self.aes_key)
         tcp.sendall(oed.from_json_or_string(plaintext).plain_data)
-        tcp.close()
 
 
-class AsyncHook(BaseHook):
-    def __init__(
-        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
-    ) -> None:
-        super().__init__(olps, res, handle, method)
-
-    async def prepare(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        len_client_public_key = int(await reader.read(4))
-        client_public_key = await reader.read(len_client_public_key)
-        logger.debug(f"捕获到客户端公钥: {client_public_key.decode()}")
-
-        self.aes_key = generate_aes_key()
-        self.encrypted_aes_key = encrypt_aes_key(self.aes_key, client_public_key)
-
-        writer.write(length(self.encrypted_aes_key))
-        writer.write(self.encrypted_aes_key)
-
-    async def response(
-        self,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter,
-        request: OblivionRequest,
-    ):
-        if callable(self.res):
-            plaintext = self.res(request)
-        else:
-            plaintext = self.res
-
-        oed = OED(AES_KEY=self.aes_key)
-        writer.write(oed.from_json_or_string(plaintext).plain_data)
-        await writer.drain()
-        writer.close()
-
-
-class Hooks(list[Hook | AsyncHook]):
+class Hooks(list[Hook]):
     def __init__(self, *args, **kwargs) -> None:
         super(Hooks, self).__init__(*args, **kwargs)
-
-    def is_async(self):
-        if len(self) == 0:
-            return False
-
-        return isinstance(self[0], AsyncHook)
 
     def get(self, olps: str) -> Hook | None:
         for hook in self:
@@ -158,12 +108,7 @@ class Hooks(list[Hook | AsyncHook]):
                 print(f"Warning: A hook with {olps} exists, will do nothing here.")
                 return False
 
-        if self.is_async():
-            hook = AsyncHook(olps=olps, res=res, method="GET")
-        else:
-            hook = Hook(olps=olps, res=res, method="GET")
-
-        self.append(hook)
+        self.append(Hook(olps=olps, res=res, method="GET"))
         return True
 
     def edit(self, olps: str, res: str | Callable) -> bool:
@@ -174,7 +119,7 @@ class Hooks(list[Hook | AsyncHook]):
 
         return False
 
-    def regist(self, olps: str):
+    def regist(self, olps: str) -> Callable:
         def wrapper(func):
             self.add(olps, func)
 
@@ -211,7 +156,9 @@ class Server:
         self.not_found = Hook("/404", res=not_found)
         self.threadpool = ThreadPool()
 
-    def handle(self, client_tcp, client_address):
+    def handle(
+        self, client_tcp: socket.socket, client_address: Tuple[str, int]
+    ) -> None:
         connection = ServerConnection()
         request = connection.solve(client_tcp, client_address)
 
@@ -229,6 +176,7 @@ class Server:
 
         self.not_found.prepare(client_tcp)
         self.not_found.response(client_tcp)
+        client_tcp.close()
         print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
 
     def _run(self) -> NoReturn:
@@ -241,10 +189,10 @@ class Server:
 
         while True:
             client, client_address = tcp.accept()  # 等待客户端连接
+            client.settimeout(20)
             self.threadpool.new(lambda: self.handle(client, client_address))
-            # print(self.threadpool.activeCount())
 
-    def run(self):
+    def run(self) -> NoReturn:
         try:
             self._run()
         except KeyboardInterrupt:

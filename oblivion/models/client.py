@@ -1,7 +1,7 @@
 from multilogging import multilogger
 
 from ..utils.parser import length
-from ..utils.encryptor import encrypt_aes_key, encrypt_message
+from ..utils.encryptor import encrypt_aes_key
 from ..utils.decryptor import decrypt_aes_key, decrypt_message
 from ..utils.generator import generate_key_pair, generate_aes_key
 
@@ -10,7 +10,6 @@ from ._models import BaseRequest
 from .package import OEA, OED
 
 import socket
-import json
 
 
 logger = multilogger(name="Oblivion", payload="models.client")
@@ -30,6 +29,7 @@ class Request(BaseRequest):
 
         try:
             self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.tcp.settimeout(20)
             self.tcp.connect((self.path.host, self.path.port))
         except ConnectionRefusedError:
             raise exceptions.ConnectionRefusedError("向服务端的链接请求被拒绝, 可能是由于服务端遭到攻击.")
