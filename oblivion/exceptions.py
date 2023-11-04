@@ -28,3 +28,6 @@ class BadBytes(RequestException):
 
 class ConnectTimedOut(RequestException):
     """响应超时"""
+
+class AllAttemptsRetryFailed(RequestException):
+    """重连失败"""

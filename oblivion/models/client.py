@@ -1,14 +1,15 @@
 from typing import Tuple
 from multilogging import multilogger
+from loguru import logger
 
 from ..utils.parser import length
 from ..utils.encryptor import encrypt_aes_key
-from ..utils.decryptor import decrypt_aes_key, decrypt_message
+from ..utils.decryptor import decrypt_aes_key
 from ..utils.generator import generate_key_pair, generate_aes_key
 
 from .. import exceptions
 from ._models import BaseRequest
-from .package import OEA, OED
+from .packet import OEA, OED
 
 import socket
 
@@ -73,11 +74,12 @@ class Request(BaseRequest):
         if self.method == "GET":
             return
 
-        oed = OED(AES_KEY=self.aes_key)
-        self.data = (
-            oed.from_dict(self.data) if self.data else oed.from_json_or_string("{}")
+        oed = (
+            OED(AES_KEY=self.aes_key).from_dict(self.data)
+            if self.data
+            else OED(AES_KEY=self.aes_key).from_json_or_string("{}")
         )
-        self.tcp.sendall(self.data.plain_data)
+        oed.to_stream(self.tcp, 5)
 
     def recv(self) -> str:
         if not self.prepared:
@@ -92,17 +94,8 @@ class Request(BaseRequest):
             encrypted_aes_key, self.private_key
         )  # 使用RSA私钥解密AES密钥
 
-        # 接受请求返回
-        len_recv = int(self.tcp.recv(4).decode())
-        encrypted_data = self.tcp.recv(len_recv)
-        len_nonce = int(self.tcp.recv(4).decode())  # 捕获nonce长度
-        nonce = self.tcp.recv(len_nonce)  # 捕获nonce
-
-        len_tag = int(self.tcp.recv(4).decode())  # 捕获tag长度
-        tag = self.tcp.recv(len_tag)  # 捕获tag
-
-        self.data = decrypt_message(
-            encrypted_data, tag, decrypted_aes_key, nonce, verify=self.verify
-        )  # 使用AES解密应答
-
-        return self.data
+        return (
+            OED(AES_KEY=decrypted_aes_key)
+            .from_stream(self.tcp, 5, verify=self.verify)
+            .DATA
+        )

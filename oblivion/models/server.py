@@ -1,18 +1,19 @@
 from multilogging import multilogger
-from typing import Tuple, NoReturn, Callable, List, Any
+from typing import Tuple, NoReturn, Callable, Any
+from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 from ._models import BaseConnection, BaseHook
-from .package import OEA, OED
+from .packet import OEA, OED
 
 from ..utils.parser import OblivionRequest, length
 from ..utils.encryptor import encrypt_aes_key
-from ..utils.decryptor import decrypt_aes_key, decrypt_message
+from ..utils.decryptor import decrypt_aes_key
 from ..utils.generator import generate_key_pair, generate_aes_key
 
 import socket
-import json
 import queue
+import os
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
@@ -58,26 +59,13 @@ class ServerConnection(BaseConnection):
             self.client_aes_key = decrypt_aes_key(
                 encrypted_aes_key, self.private_key
             )  # 使用RSA私钥解密AES密钥
-            self.recv(client)
-            self.data = json.loads(
-                decrypt_message(
-                    self.request_data, self.tag, self.client_aes_key, self.nonce
-                )
-            )  # 使用AES解密消息
-            self.request.POST = self.data
+            self.request.POST = (
+                OED(AES_KEY=self.client_aes_key).from_stream(client, 5).DATA
+            )
         elif self.request.method == "GET":
             pass
         else:
             pass
-
-    def recv(self, client: socket.socket) -> Tuple[bytes, bytes, bytes]:
-        len_ciphertext = int(client.recv(4).decode())  # 捕获加密文本长度
-        self.request_data = client.recv(len_ciphertext)  # 捕获加密文本
-        len_nonce = int(client.recv(4).decode())  # 捕获nonce长度
-        self.nonce = client.recv(len_nonce)  # 捕获nonce
-        len_tag = int(client.recv(4).decode())  # 捕获tag长度
-        self.tag = client.recv(len_tag)  # 捕获tag
-        return self.request_data, self.tag, self.nonce
 
     def solve(self, client, client_address) -> OblivionRequest:
         self.handshake(client, client_address)
@@ -107,8 +95,8 @@ class Hook(BaseHook):
         else:
             plaintext = self.res
 
-        oed = OED(AES_KEY=self.aes_key)
-        tcp.sendall(oed.from_json_or_string(plaintext).plain_data)
+        oed = OED(AES_KEY=self.aes_key).from_json_or_string(plaintext)
+        oed.to_stream(tcp, 5)
 
 
 class Hooks(list[Hook]):
@@ -149,27 +137,12 @@ class Hooks(list[Hook]):
         return wrapper
 
 
-class ThreadPool:
-    threads: List[Thread] = []
-    # queue: List[Thread] = []
-
-    def new(self, func):
-        thread = Thread(target=func)
-        thread.daemon = True
-        thread.start()
-        self.threads.append(thread)
-        for thread in self.threads:
-            if not thread.is_alive():
-                self.threads.remove(thread)
-        return thread
-
-
 class Server:
     def __init__(
         self,
         host="0.0.0.0",
         port=80,
-        max_connection=1000,
+        max_connection=1024,
         hooks=[],
         not_found="404 Not Found",
     ) -> None:
@@ -178,7 +151,7 @@ class Server:
         self.max_connections = max_connection
         self.hooks: Hooks = tuple(hooks)
         self.not_found = Hook("/404", res=not_found)
-        self.threadpool = ThreadPool()
+        self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
         self.keypool = RSAKeyPairPool()
 
     def handle(
@@ -210,14 +183,16 @@ class Server:
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         tcp.bind((self.host, self.port))
         tcp.listen(self.max_connections)
-        self.threadpool.new(lambda: self.keypool.keep_forever(10))
+        keep_thread = Thread(target=lambda: self.keypool.keep_forever(10))
+        keep_thread.daemon = True
+        keep_thread.start()
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
         print("Quit the server by close the window.")
 
         while True:
             client, client_address = tcp.accept()  # 等待客户端连接
             client.settimeout(20)
-            self.threadpool.new(lambda: self.handle(client, client_address))
+            self.threadpool.submit(self.handle, client, client_address)
 
     def run(self) -> NoReturn:
         try:
