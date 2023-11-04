@@ -15,7 +15,7 @@ import socket
 import queue
 import os
 import traceback
-import sys
+
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
@@ -26,7 +26,7 @@ class RSAKeyPairPool:
 
     def new(self):
         key_pair = generate_key_pair()
-        for _ in range(20):
+        for _ in range(32):
             self.pairs.put(key_pair)
 
     def get(self):
@@ -36,7 +36,7 @@ class RSAKeyPairPool:
 
     def keep_forever(self, limit: int):
         while True:
-            if self.pairs.qsize() < limit * 5:
+            if self.pairs.qsize() < limit:
                 self.new()
 
     def size(self):
@@ -56,7 +56,13 @@ class ServerConnection(BaseConnection):
         if self.request.method == "POST":
             OPK().from_public_key_bytes(self.public_key).to_stream(client)
             self.request.POST = (
-                OED(AES_KEY=OEA(PRIVATE_KEY=self.private_key).from_stream(client).AES_KEY).from_stream(client, 5).DATA
+                OED(
+                    AES_KEY=OEA(PRIVATE_KEY=self.private_key)
+                    .from_stream(client)
+                    .AES_KEY
+                )
+                .from_stream(client, 5)
+                .DATA
             )
         elif self.request.method == "GET":
             pass
@@ -175,7 +181,7 @@ class Server:
         except:
             traceback.print_exc()
 
-    def _run(self) -> NoReturn:
+    def run(self) -> NoReturn:
         print("Performing system checks...\n")
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -183,22 +189,13 @@ class Server:
         except:
             raise exceptions.AddressAlreadyInUse
         tcp.listen(self.max_connections)
-        keep_thread = Thread(target=lambda: self.keypool.keep_forever(500))
+        keep_thread = Thread(target=lambda: self.keypool.keep_forever(1024))
         keep_thread.daemon = True
         keep_thread.start()
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
         print("Quit the server by CTRL-BREAK.")
 
         while True:
-            try:
-                client, client_address = tcp.accept()  # 等待客户端连接
-                client.settimeout(20)
-                self.threadpool.submit(self.handle, client, client_address)
-            except KeyboardInterrupt:
-                sys.exit(0)
-
-    def run(self) -> NoReturn:
-        try:
-            self._run()
-        except KeyboardInterrupt:
-            print("\nOblivion server closed.")
+            client, client_address = tcp.accept()  # 等待客户端连接
+            client.settimeout(20)
+            self.threadpool.submit(self.handle, client, client_address)
