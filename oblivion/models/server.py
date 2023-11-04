@@ -8,10 +8,8 @@ from .packet import OPK, OEA, OED
 
 from .. import exceptions
 
-from ..utils.parser import OblivionRequest, length
-from ..utils.encryptor import encrypt_aes_key
-from ..utils.decryptor import decrypt_aes_key
-from ..utils.generator import generate_key_pair, generate_aes_key
+from ..utils.parser import OblivionRequest
+from ..utils.generator import generate_key_pair
 
 import socket
 import queue
@@ -24,11 +22,11 @@ logger = multilogger(name="Oblivion", payload="models")
 
 
 class RSAKeyPairPool:
-    pairs: queue.Queue = queue.Queue()
+    pairs: queue.SimpleQueue = queue.SimpleQueue()
 
     def new(self):
         key_pair = generate_key_pair()
-        for _ in range(5):
+        for _ in range(20):
             self.pairs.put(key_pair)
 
     def get(self):
@@ -185,7 +183,7 @@ class Server:
         except:
             raise exceptions.AddressAlreadyInUse
         tcp.listen(self.max_connections)
-        keep_thread = Thread(target=lambda: self.keypool.keep_forever(10))
+        keep_thread = Thread(target=lambda: self.keypool.keep_forever(500))
         keep_thread.daemon = True
         keep_thread.start()
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
