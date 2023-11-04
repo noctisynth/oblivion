@@ -11,11 +11,16 @@ class Session:
         return "<Session [Oblivion]>"
 
     def request(
-        self, method: str, olps: str, data: dict = None, key_pair: tuple = None
+        self,
+        method: str,
+        olps: str,
+        data: dict = None,
+        key_pair: tuple = None,
+        verify: bool = True,
     ):
         # 创建请求
         logger.debug(f"创建请求: {olps}")
-        req = Request(method=method, olps=olps, data=data, key_pair=key_pair)
+        req = Request(method=method, olps=olps, data=data, key_pair=key_pair, verify=verify)
         req.prepare()
         return self.send(request=req)
 

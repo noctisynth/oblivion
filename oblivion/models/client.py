@@ -1,3 +1,4 @@
+from typing import Tuple
 from multilogging import multilogger
 
 from ..utils.parser import length
@@ -17,15 +18,24 @@ logger = multilogger(name="Oblivion", payload="models.client")
 
 
 class Request(BaseRequest):
-    def __init__(self, method: str = None, olps: str = None, data: dict = None, key_pair: tuple = None) -> None:
-        super().__init__(method, olps, data, key_pair)
+    def __init__(
+        self,
+        method: str = None,
+        olps: str = None,
+        data: dict = None,
+        key_pair: Tuple[bytes, bytes] = None,
+        verify: bool = True,
+    ) -> None:
+        super().__init__(method, olps, data, key_pair, verify)
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}] {self.olps}>"
 
     def prepare(self) -> None:
         self.aes_key = generate_aes_key()  # 生成随机的AES密钥
-        self.private_key, self.public_key = self.key_pair if self.key_pair else generate_key_pair()
+        self.private_key, self.public_key = (
+            self.key_pair if self.key_pair else generate_key_pair()
+        )
 
         try:
             self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -64,7 +74,9 @@ class Request(BaseRequest):
             return
 
         oed = OED(AES_KEY=self.aes_key)
-        self.data = oed.from_dict(self.data) if self.data else oed.from_json_or_string("{}")
+        self.data = (
+            oed.from_dict(self.data) if self.data else oed.from_json_or_string("{}")
+        )
         self.tcp.sendall(self.data.plain_data)
 
     def recv(self) -> str:
@@ -90,7 +102,7 @@ class Request(BaseRequest):
         tag = self.tcp.recv(len_tag)  # 捕获tag
 
         self.data = decrypt_message(
-            encrypted_data, tag, decrypted_aes_key, nonce
+            encrypted_data, tag, decrypted_aes_key, nonce, verify=self.verify
         )  # 使用AES解密应答
 
         return self.data

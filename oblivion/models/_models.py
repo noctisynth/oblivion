@@ -41,6 +41,7 @@ class BaseRequest:
         olps: str = None,
         data: dict = None,
         key_pair: Tuple[bytes, bytes] = None,
+        verify: bool = True,
     ) -> None:
         self.method = method.upper()
         self.path = OblivionPath(olps)
@@ -49,6 +50,7 @@ class BaseRequest:
         self.plain_text = self.oblivion.plain_text
         self.data = data
         self.key_pair = key_pair
+        self.verify = verify
         self.prepared = False
 
     @abc.abstractmethod
@@ -96,7 +98,7 @@ class BaseHook:
         return header.olps == self.olps.rstrip("/")
 
 
-class OblivionPackage:
+class BasePackage:
     """Oblivion Package Basic Class"""
 
     length: bytes

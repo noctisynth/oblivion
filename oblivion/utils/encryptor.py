@@ -4,8 +4,9 @@ from Crypto import Random
 
 import Crypto.Hash.SHA256
 
+
 def encrypt_message(message: str, aes_key: bytes):
-    """ 使用AES加密消息 """
+    """使用AES加密消息"""
     nonce = Random.get_random_bytes(12)
     cipher = AES.new(aes_key, AES.MODE_GCM, nonce=nonce)
     ciphertext, tag = cipher.encrypt_and_digest(message.encode())
@@ -13,7 +14,7 @@ def encrypt_message(message: str, aes_key: bytes):
 
 
 def encrypt_aes_key(aes_key, public_key):
-    """ 使用RSA公钥加密AES密钥 """
+    """使用RSA公钥加密AES密钥"""
     rsa_key = RSA.import_key(public_key)
     cipher = PKCS1_OAEP.new(rsa_key, hashAlgo=Crypto.Hash.SHA256)
     encrypted_aes_key = cipher.encrypt(aes_key)

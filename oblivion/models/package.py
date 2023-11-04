@@ -1,11 +1,11 @@
 from ..utils.encryptor import encrypt_aes_key, encrypt_message
 from ..utils.parser import length
-from ._models import OblivionPackage
+from ._models import BasePackage
 
 import json
 
 
-class OEA(OblivionPackage):
+class OEA(BasePackage):
     """Oblivous Encrypted AES-Key"""
 
     length: int
@@ -26,7 +26,7 @@ class OEA(OblivionPackage):
         return self.length + self.ENCRYPTED_AES_KEY
 
 
-class OED(OblivionPackage):
+class OED(BasePackage):
     """Oblivous Encrypted Data"""
 
     length: int

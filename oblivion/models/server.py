@@ -33,7 +33,7 @@ class RSAKeyPairPool:
 
     def keep_forever(self, limit: int):
         while True:
-            if self.pairs.qsize() < limit:
+            if self.pairs.qsize() < limit * 5:
                 self.new()
 
     def size(self):
@@ -192,7 +192,9 @@ class Server:
             if hook.is_valid_header(request):
                 hook.prepare(client_tcp)
                 hook.response(client_tcp, request)
-                print(f"Oblivion/1.0 {request.method} From {client_address[0]} {hook.olps} 200")
+                print(
+                    f"Oblivion/1.0 {request.method} From {client_address[0]} {hook.olps} 200"
+                )
                 break
 
         if hook.is_valid_header(request):
