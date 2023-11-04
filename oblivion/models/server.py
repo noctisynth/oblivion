@@ -4,7 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 from ._models import BaseConnection, BaseHook
-from .packet import OEA, OED
+from .packet import OPK, OEA, OED
+
+from .. import exceptions
 
 from ..utils.parser import OblivionRequest, length
 from ..utils.encryptor import encrypt_aes_key
@@ -14,6 +16,8 @@ from ..utils.generator import generate_key_pair, generate_aes_key
 import socket
 import queue
 import os
+import traceback
+import sys
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
@@ -52,15 +56,9 @@ class ServerConnection(BaseConnection):
         self.request.remote_port = client_address[1]
 
         if self.request.method == "POST":
-            client.sendall(length(self.public_key))  # 发送公钥长度
-            client.sendall(self.public_key)  # 发送公钥
-            len_encrypted_aes_key = int(client.recv(4).decode())  # 捕获AES_KEY长度
-            encrypted_aes_key = client.recv(len_encrypted_aes_key)  # 捕获AES_KEY
-            self.client_aes_key = decrypt_aes_key(
-                encrypted_aes_key, self.private_key
-            )  # 使用RSA私钥解密AES密钥
+            OPK().from_public_key_bytes(self.public_key).to_stream(client)
             self.request.POST = (
-                OED(AES_KEY=self.client_aes_key).from_stream(client, 5).DATA
+                OED(AES_KEY=OEA(PRIVATE_KEY=self.private_key).from_stream(client).AES_KEY).from_stream(client, 5).DATA
             )
         elif self.request.method == "GET":
             pass
@@ -79,15 +77,10 @@ class Hook(BaseHook):
         super().__init__(olps, res, handle, method)
 
     def prepare(self, tcp: socket.socket) -> None:
-        len_client_public_key = int(tcp.recv(4).decode())  # 从客户端获得公钥长度
-        client_public_key = tcp.recv(len_client_public_key)  # 从客户端获得公钥
-        self.aes_key = generate_aes_key()  # 生成随机的AES密钥
-        self.encrypted_aes_key = encrypt_aes_key(
-            self.aes_key, client_public_key
-        )  # 使用客户端RSA公钥加密AES密钥
-
-        tcp.sendall(length(self.encrypted_aes_key))  # 发送AES_KEY长度
-        tcp.sendall(self.encrypted_aes_key)  # 发送AES_KEY
+        client_public_key = OPK().from_stream(tcp).PUBLIC_KEY  # 从客户端获得公钥
+        oea = OEA(PUBLIC_KEY=client_public_key).new()
+        self.aes_key = oea.AES_KEY
+        oea.to_stream(tcp)
 
     def response(self, tcp: socket.socket, request: OblivionRequest) -> None:
         if callable(self.res):
@@ -154,7 +147,7 @@ class Server:
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
         self.keypool = RSAKeyPairPool()
 
-    def handle(
+    def _handle(
         self, client_tcp: socket.socket, client_address: Tuple[str, int]
     ) -> None:
         connection = ServerConnection(self.keypool.get())
@@ -178,21 +171,33 @@ class Server:
         client_tcp.close()
         print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
 
+    def handle(self, client_tcp: socket.socket, client_address: Tuple[str, int]):
+        try:
+            self._handle(client_tcp, client_address)
+        except:
+            traceback.print_exc()
+
     def _run(self) -> NoReturn:
         print("Performing system checks...\n")
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp.bind((self.host, self.port))
+        try:
+            tcp.bind((self.host, self.port))
+        except:
+            raise exceptions.AddressAlreadyInUse
         tcp.listen(self.max_connections)
         keep_thread = Thread(target=lambda: self.keypool.keep_forever(10))
         keep_thread.daemon = True
         keep_thread.start()
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
-        print("Quit the server by close the window.")
+        print("Quit the server by CTRL-BREAK.")
 
         while True:
-            client, client_address = tcp.accept()  # 等待客户端连接
-            client.settimeout(20)
-            self.threadpool.submit(self.handle, client, client_address)
+            try:
+                client, client_address = tcp.accept()  # 等待客户端连接
+                client.settimeout(20)
+                self.threadpool.submit(self.handle, client, client_address)
+            except KeyboardInterrupt:
+                sys.exit(0)
 
     def run(self) -> NoReturn:
         try:

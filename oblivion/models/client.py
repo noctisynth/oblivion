@@ -3,13 +3,11 @@ from multilogging import multilogger
 from loguru import logger
 
 from ..utils.parser import length
-from ..utils.encryptor import encrypt_aes_key
-from ..utils.decryptor import decrypt_aes_key
 from ..utils.generator import generate_key_pair, generate_aes_key
 
 from .. import exceptions
 from ._models import BaseRequest
-from .packet import OEA, OED
+from .packet import OPK, OEA, OED
 
 import socket
 
@@ -47,15 +45,7 @@ class Request(BaseRequest):
 
         self.send_header()
         if self.method == "POST":
-            len_server_public_key = int(self.tcp.recv(4).decode())  # 接收公钥长度
-            server_public_key = self.tcp.recv(len_server_public_key)  # 接收公钥
-            logger.debug(f"接收到的公钥: {server_public_key.decode()}")
-
-            encrypted_aes_key = encrypt_aes_key(
-                self.aes_key, server_public_key
-            )  # 使用RSA公钥加密AES密钥
-            self.tcp.sendall(length(encrypted_aes_key))  # 发送AES_KEY长度
-            self.tcp.sendall(encrypted_aes_key)  # 发送AES_KEY
+            OEA(PUBLIC_KEY=OPK().from_stream(self.tcp).PUBLIC_KEY).from_aes_key(self.aes_key).to_stream(self.tcp)
         elif self.method == "GET":
             pass
         elif self.method == "FORWARD":
@@ -85,17 +75,9 @@ class Request(BaseRequest):
         if not self.prepared:
             raise NotImplementedError
 
-        self.tcp.sendall(length(self.public_key))  # 发送本地公钥长度
-        self.tcp.sendall(self.public_key)  # 发送本地公钥
-
-        len_encrypted_aes_key = int(self.tcp.recv(4).decode())  # 捕获AES_KEY长度
-        encrypted_aes_key = self.tcp.recv(len_encrypted_aes_key)  # 捕获AES_KEY
-        decrypted_aes_key = decrypt_aes_key(
-            encrypted_aes_key, self.private_key
-        )  # 使用RSA私钥解密AES密钥
-
+        OPK().from_public_key_bytes(self.public_key).to_stream(self.tcp)
         return (
-            OED(AES_KEY=decrypted_aes_key)
+            OED(AES_KEY=OEA(PRIVATE_KEY=self.private_key).from_stream(self.tcp).AES_KEY)
             .from_stream(self.tcp, 5, verify=self.verify)
             .DATA
         )

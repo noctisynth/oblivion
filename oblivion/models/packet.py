@@ -5,7 +5,8 @@ from loguru import logger
 from .. import exceptions
 
 from ..utils.encryptor import encrypt_aes_key, encrypt_message
-from ..utils.decryptor import decrypt_message
+from ..utils.decryptor import decrypt_message, decrypt_aes_key
+from ..utils.generator import generate_aes_key
 from ..utils.parser import length
 
 from ._models import BasePackage
@@ -43,14 +44,46 @@ class ACK(BasePackage):
         return self.sequence.encode()
 
 
+class OPK(BasePackage):
+    """Oblivious Public-Key"""
+
+    length: int
+    PUBLIC_KEY: bytes
+
+    def from_public_key_bytes(self, __public_key_bytes: bytes) -> "OPK":
+        self.PUBLIC_KEY = __public_key_bytes
+        return self
+
+    def from_stream(self, __stream: socket) -> "OPK":
+        self.PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        return self
+
+    def to_stream(self, __stream: socket):
+        __stream.sendall(self.plain_data)
+
+    @property
+    def plain_data(self) -> bytes:
+        return length(self.PUBLIC_KEY) + self.PUBLIC_KEY
+
+
 class OEA(BasePackage):
     """Oblivious Encrypted AES-Key"""
 
     length: int
+    AES_KEY: bytes
     ENCRYPTED_AES_KEY: bytes
+    PUBLIC_KEY: bytes
+    PRIVATE_KEY: bytes
 
-    def from_aes_key(self, __aes_key, __public_key) -> "OEA":
-        self.ENCRYPTED_AES_KEY = encrypt_aes_key(__aes_key, __public_key)
+    def new(self) -> "OEA":
+        self.AES_KEY = generate_aes_key()
+        self.ENCRYPTED_AES_KEY = encrypt_aes_key(self.AES_KEY, self.PUBLIC_KEY)
+        self.length = length(self.ENCRYPTED_AES_KEY)
+        return self
+
+    def from_aes_key(self, __aes_key) -> "OEA":
+        self.AES_KEY = __aes_key
+        self.ENCRYPTED_AES_KEY = encrypt_aes_key(__aes_key, self.PUBLIC_KEY)
         self.length = length(self.ENCRYPTED_AES_KEY)
         return self
 
@@ -58,6 +91,14 @@ class OEA(BasePackage):
         self.ENCRYPTED_AES_KEY = __encrypted_aes_key
         self.length = length(self.ENCRYPTED_AES_KEY)
         return self
+
+    def from_stream(self, __stream: socket) -> "OEA":
+        self.ENCRYPTED_AES_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        self.AES_KEY = decrypt_aes_key(self.ENCRYPTED_AES_KEY, self.PRIVATE_KEY)
+        return self
+
+    def to_stream(self, __stream: socket):
+        __stream.sendall(self.plain_data)
 
     @property
     def plain_data(self) -> bytes:
