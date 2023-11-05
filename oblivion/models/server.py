@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 
 from ._models import BaseConnection, BaseHook
-from .packet import OPK, OEA, OED
+from .packet import OKE, OED
 
 from .. import exceptions
 
@@ -15,6 +15,7 @@ import socket
 import queue
 import os
 import traceback
+import json
 
 
 logger = multilogger(name="Oblivion", payload="models")
@@ -30,14 +31,15 @@ class RSAKeyPairPool:
             self.pairs.put(key_pair)
 
     def get(self):
-        while True:
-            if not self.pairs.empty():
-                return self.pairs.get()
+        return self.pairs.get()
+
+    def keep(self, limit: int):
+        if self.pairs.qsize() < limit:
+            self.new()
 
     def keep_forever(self, limit: int):
         while True:
-            if self.pairs.qsize() < limit:
-                self.new()
+            self.keep(limit=limit)
 
     def size(self):
         return self.pairs.qsize()
@@ -47,25 +49,22 @@ class ServerConnection(BaseConnection):
     def __init__(self, key_pair: Tuple[bytes, bytes]) -> None:
         self.private_key, self.public_key = key_pair
 
-    def handshake(self, client: socket.socket, client_address: Tuple[str, int]) -> None:
-        len_header = int(client.recv(4).decode())
-        self.request = OblivionRequest(client.recv(len_header).decode())  # 接收请求头
+    def handshake(self, stream: socket.socket, client_address: Tuple[str, int]) -> None:
+        len_header = int(stream.recv(4).decode())
+        self.request = OblivionRequest(stream.recv(len_header).decode())  # 接收请求头
         self.request.remote_addr = client_address[0]
         self.request.remote_port = client_address[1]
 
+        oke = OKE(PRIVATE_KEY=self.private_key).from_stream(stream)
+        self.aes_key = oke.SHARED_AES_KEY
+        oke.from_public_key_bytes(self.public_key).to_stream(stream)
+
         if self.request.method == "POST":
-            OPK().from_public_key_bytes(self.public_key).to_stream(client)
-            self.request.POST = (
-                OED(
-                    AES_KEY=OEA(PRIVATE_KEY=self.private_key)
-                    .from_stream(client)
-                    .AES_KEY
-                )
-                .from_stream(client, 5)
-                .DATA
+            self.request.POST = json.loads(
+                OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
             )
         elif self.request.method == "GET":
-            pass
+            self.request.POST = None
         else:
             pass
 
@@ -80,20 +79,15 @@ class Hook(BaseHook):
     ) -> None:
         super().__init__(olps, res, handle, method)
 
-    def prepare(self, tcp: socket.socket) -> None:
-        client_public_key = OPK().from_stream(tcp).PUBLIC_KEY  # 从客户端获得公钥
-        oea = OEA(PUBLIC_KEY=client_public_key).new()
-        self.aes_key = oea.AES_KEY
-        oea.to_stream(tcp)
-
-    def response(self, tcp: socket.socket, request: OblivionRequest) -> None:
+    def response(
+        self, tcp: socket.socket, request: OblivionRequest, aes_key: bytes
+    ) -> None:
         if callable(self.res):
             plaintext = self.res(request)
         else:
             plaintext = self.res
 
-        oed = OED(AES_KEY=self.aes_key).from_json_or_string(plaintext)
-        oed.to_stream(tcp, 5)
+        OED(AES_KEY=aes_key).from_json_or_string(plaintext).to_stream(tcp, 5)
 
 
 class Hooks(list[Hook]):
@@ -151,33 +145,30 @@ class Server:
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
         self.keypool = RSAKeyPairPool()
 
-    def _handle(
-        self, client_tcp: socket.socket, client_address: Tuple[str, int]
-    ) -> None:
+    def _handle(self, __stream: socket.socket, __address: Tuple[str, int]) -> None:
         connection = ServerConnection(self.keypool.get())
-        request = connection.solve(client_tcp, client_address)
+        request = connection.solve(__stream, __address)
 
         for hook in self.hooks:
             logger.debug(f"Checking Hook: {hook.olps}")
             if hook.is_valid_header(request):
-                hook.prepare(client_tcp)
-                hook.response(client_tcp, request)
+                hook.response(__stream, request, connection.aes_key)
                 print(
-                    f"Oblivion/1.0 {request.method} From {client_address[0]} {hook.olps} 200"
+                    f"Oblivion/1.0 {request.method} From {__address[0]} {hook.olps} 200"
                 )
                 break
 
         if hook.is_valid_header(request):
             return
 
-        self.not_found.prepare(client_tcp)
-        self.not_found.response(client_tcp)
-        client_tcp.close()
-        print(f"Oblivion/1.0 From {client_address} {hook.olps} 404")
+        self.not_found.response(__stream, connection.aes_key)
+        __stream.close()
+        print(f"Oblivion/1.0 From {__address} {hook.olps} 404")
+        # self.keypool.keep()
 
-    def handle(self, client_tcp: socket.socket, client_address: Tuple[str, int]):
+    def handle(self, __stream: socket.socket, __address: Tuple[str, int]):
         try:
-            self._handle(client_tcp, client_address)
+            self._handle(__stream, __address)
         except:
             traceback.print_exc()
 
@@ -196,6 +187,6 @@ class Server:
         print("Quit the server by CTRL-BREAK.")
 
         while True:
-            client, client_address = tcp.accept()  # 等待客户端连接
-            client.settimeout(20)
-            self.threadpool.submit(self.handle, client, client_address)
+            stream, address = tcp.accept()  # 等待客户端连接
+            stream.settimeout(20)
+            self.threadpool.submit(self.handle, stream, address)

@@ -4,9 +4,9 @@ from loguru import logger
 
 from .. import exceptions
 
-from ..utils.encryptor import encrypt_aes_key, encrypt_message
-from ..utils.decryptor import decrypt_message, decrypt_aes_key
-from ..utils.generator import generate_aes_key
+from ..utils.encryptor import encrypt_message
+from ..utils.decryptor import decrypt_message
+from ..utils.generator import generate_shared_key
 from ..utils.parser import length
 
 from ._models import BasePackage
@@ -44,18 +44,29 @@ class ACK(BasePackage):
         return self.sequence.encode()
 
 
-class OPK(BasePackage):
-    """Oblivious Public-Key"""
+class OKE(BasePackage):
+    """Oblivious Key Exchange"""
 
     length: int
     PUBLIC_KEY: bytes
+    PRIVATE_KEY: bytes
+    REMOTE_PUBLIC_KEY: bytes
+    SHARED_AES_KEY: bytes
 
-    def from_public_key_bytes(self, __public_key_bytes: bytes) -> "OPK":
+    def from_public_key_bytes(self, __public_key_bytes: bytes) -> "OKE":
         self.PUBLIC_KEY = __public_key_bytes
         return self
 
-    def from_stream(self, __stream: socket) -> "OPK":
-        self.PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+    def from_stream(self, __stream: socket) -> "OKE":
+        print("[*] 接收公钥中...")
+        from datetime import datetime
+
+        pre = datetime.now()
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        print("[+] 公钥接收完毕, 用时{}".format(datetime.now() - pre))
+        self.SHARED_AES_KEY = generate_shared_key(
+            self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY
+        )
         return self
 
     def to_stream(self, __stream: socket):
@@ -64,45 +75,6 @@ class OPK(BasePackage):
     @property
     def plain_data(self) -> bytes:
         return length(self.PUBLIC_KEY) + self.PUBLIC_KEY
-
-
-class OEA(BasePackage):
-    """Oblivious Encrypted AES-Key"""
-
-    length: int
-    AES_KEY: bytes
-    ENCRYPTED_AES_KEY: bytes
-    PUBLIC_KEY: bytes
-    PRIVATE_KEY: bytes
-
-    def new(self) -> "OEA":
-        self.AES_KEY = generate_aes_key()
-        self.ENCRYPTED_AES_KEY = encrypt_aes_key(self.AES_KEY, self.PUBLIC_KEY)
-        self.length = length(self.ENCRYPTED_AES_KEY)
-        return self
-
-    def from_aes_key(self, __aes_key) -> "OEA":
-        self.AES_KEY = __aes_key
-        self.ENCRYPTED_AES_KEY = encrypt_aes_key(__aes_key, self.PUBLIC_KEY)
-        self.length = length(self.ENCRYPTED_AES_KEY)
-        return self
-
-    def from_encrypted_aes_key(self, __encrypted_aes_key) -> "OEA":
-        self.ENCRYPTED_AES_KEY = __encrypted_aes_key
-        self.length = length(self.ENCRYPTED_AES_KEY)
-        return self
-
-    def from_stream(self, __stream: socket) -> "OEA":
-        self.ENCRYPTED_AES_KEY = __stream.recv(int(__stream.recv(4).decode()))
-        self.AES_KEY = decrypt_aes_key(self.ENCRYPTED_AES_KEY, self.PRIVATE_KEY)
-        return self
-
-    def to_stream(self, __stream: socket):
-        __stream.sendall(self.plain_data)
-
-    @property
-    def plain_data(self) -> bytes:
-        return self.length + self.ENCRYPTED_AES_KEY
 
 
 class OED(BasePackage):
@@ -150,15 +122,13 @@ class OED(BasePackage):
             self.TAG = __stream.recv(len_tag)  # 捕获tag
 
             try:
-                self.DATA = json.dumps(
-                    decrypt_message(
-                        self.ENCRYPTED_DATA,
-                        self.TAG,
-                        self.AES_KEY,
-                        self.NONCE,
-                        verify=verify,
-                    )  # 尝试解密
-                )
+                self.DATA = decrypt_message(
+                    self.ENCRYPTED_DATA,
+                    self.TAG,
+                    self.AES_KEY,
+                    self.NONCE,
+                    verify=verify,
+                )  # 尝试解密
                 __stream.send(ack_packet.plain_data)  # 发送ACK校验包
                 ack = True
                 break

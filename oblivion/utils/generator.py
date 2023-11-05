@@ -1,15 +1,22 @@
-from Crypto import Random
-from Crypto.PublicKey import RSA
-
-
-def generate_aes_key():
-    """生成随机的 AES_KEY"""
-    return Random.get_random_bytes(16)
+from Crypto.PublicKey import ECC
+from Crypto.Protocol.KDF import scrypt
 
 
 def generate_key_pair():
-    """生成RSA密钥对(私钥, 公钥)"""
-    key = RSA.generate(2048, Random.new().read)
-    private_key = key.export_key()
-    public_key = key.publickey().export_key()
-    return private_key, public_key
+    """生成ECDH密钥对(私钥, 公钥)"""
+    key = ECC.generate(curve="P-256")
+    return key.export_key(format="DER"), key.public_key().export_key(format="DER")
+
+
+def generate_shared_key(__private_key, __public_key):
+    """生成ECDH共享密钥"""
+    return scrypt(
+        (
+            ECC.import_key(__public_key).pointQ * ECC.import_key(__private_key).d
+        ).x.to_bytes(32, "big"),
+        b"",
+        16,
+        N=2**12,
+        r=8,
+        p=1,
+    )

@@ -3,11 +3,11 @@ from multilogging import multilogger
 from loguru import logger
 
 from ..utils.parser import length
-from ..utils.generator import generate_key_pair, generate_aes_key
+from ..utils.generator import generate_key_pair
 
 from .. import exceptions
 from ._models import BaseRequest
-from .packet import OPK, OEA, OED
+from .packet import OKE, OED
 
 import socket
 
@@ -31,7 +31,6 @@ class Request(BaseRequest):
         return f"<Request [{self.method}] {self.olps}>"
 
     def prepare(self) -> None:
-        self.aes_key = generate_aes_key()  # 生成随机的AES密钥
         self.private_key, self.public_key = (
             self.key_pair if self.key_pair else generate_key_pair()
         )
@@ -44,14 +43,17 @@ class Request(BaseRequest):
             raise exceptions.ConnectionRefusedError("向服务端的链接请求被拒绝, 可能是由于服务端遭到攻击.")
 
         self.send_header()
-        if self.method == "POST":
-            OEA(PUBLIC_KEY=OPK().from_stream(self.tcp).PUBLIC_KEY).from_aes_key(self.aes_key).to_stream(self.tcp)
-        elif self.method == "GET":
-            pass
-        elif self.method == "FORWARD":
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
+
+        print("[*] 进行密钥交换...")
+        from datetime import datetime
+        pre = datetime.now()
+        print("[*] 发送公钥中...")
+        oke = OKE(PRIVATE_KEY=self.private_key).from_public_key_bytes(self.public_key)
+        oke.to_stream(self.tcp)
+        print("[+] 公钥发送完毕, 用时{}.".format(datetime.now() - pre))
+        pre = datetime.now()
+        self.aes_key = oke.from_stream(self.tcp).SHARED_AES_KEY
+        print("[+] 密钥交换完毕, 用时{}.".format(datetime.now() - pre))
 
         self.prepared = True
 
@@ -64,20 +66,16 @@ class Request(BaseRequest):
         if self.method == "GET":
             return
 
-        oed = (
+        (
             OED(AES_KEY=self.aes_key).from_dict(self.data)
             if self.data
             else OED(AES_KEY=self.aes_key).from_json_or_string("{}")
-        )
-        oed.to_stream(self.tcp, 5)
+        ).to_stream(self.tcp, 5)
 
     def recv(self) -> str:
         if not self.prepared:
             raise NotImplementedError
 
-        OPK().from_public_key_bytes(self.public_key).to_stream(self.tcp)
         return (
-            OED(AES_KEY=OEA(PRIVATE_KEY=self.private_key).from_stream(self.tcp).AES_KEY)
-            .from_stream(self.tcp, 5, verify=self.verify)
-            .DATA
+            OED(AES_KEY=self.aes_key).from_stream(self.tcp, 5, verify=self.verify).DATA
         )
