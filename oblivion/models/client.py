@@ -24,8 +24,9 @@ class Request(BaseRequest):
         data: dict = None,
         key_pair: Tuple[bytes, bytes] = None,
         verify: bool = True,
+        tfo: bool = True,
     ) -> None:
-        super().__init__(method, olps, data, key_pair, verify)
+        super().__init__(method, olps, data, key_pair, verify, tfo)
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}] {self.olps}>"
@@ -37,6 +38,8 @@ class Request(BaseRequest):
 
         try:
             self.tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.tfo:
+                self.tcp.setsockopt(socket.SOL_TCP, socket.TCP_FASTOPEN, 5)
             self.tcp.settimeout(20)
             self.tcp.connect((self.path.host, self.path.port))
         except ConnectionRefusedError:
@@ -44,16 +47,9 @@ class Request(BaseRequest):
 
         self.send_header()
 
-        print("[*] 进行密钥交换...")
-        from datetime import datetime
-        pre = datetime.now()
-        print("[*] 发送公钥中...")
         oke = OKE(PRIVATE_KEY=self.private_key).from_public_key_bytes(self.public_key)
         oke.to_stream(self.tcp)
-        print("[+] 公钥发送完毕, 用时{}.".format(datetime.now() - pre))
-        pre = datetime.now()
         self.aes_key = oke.from_stream(self.tcp).SHARED_AES_KEY
-        print("[+] 密钥交换完毕, 用时{}.".format(datetime.now() - pre))
 
         self.prepared = True
 

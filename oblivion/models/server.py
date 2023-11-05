@@ -1,7 +1,6 @@
 from multilogging import multilogger
 from typing import Tuple, NoReturn, Callable, Any
 from concurrent.futures import ThreadPoolExecutor
-from threading import Thread
 
 from ._models import BaseConnection, BaseHook
 from .packet import OKE, OED
@@ -20,29 +19,6 @@ import json
 
 logger = multilogger(name="Oblivion", payload="models")
 """ `models.server`日志 """
-
-
-class RSAKeyPairPool:
-    pairs: queue.SimpleQueue = queue.SimpleQueue()
-
-    def new(self):
-        key_pair = generate_key_pair()
-        for _ in range(32):
-            self.pairs.put(key_pair)
-
-    def get(self):
-        return self.pairs.get()
-
-    def keep(self, limit: int):
-        if self.pairs.qsize() < limit:
-            self.new()
-
-    def keep_forever(self, limit: int):
-        while True:
-            self.keep(limit=limit)
-
-    def size(self):
-        return self.pairs.qsize()
 
 
 class ServerConnection(BaseConnection):
@@ -143,10 +119,10 @@ class Server:
         self.hooks: Hooks = tuple(hooks)
         self.not_found = Hook("/404", res=not_found)
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
-        self.keypool = RSAKeyPairPool()
 
     def _handle(self, __stream: socket.socket, __address: Tuple[str, int]) -> None:
-        connection = ServerConnection(self.keypool.get())
+        __stream.settimeout(20)
+        connection = ServerConnection(generate_key_pair())
         request = connection.solve(__stream, __address)
 
         for hook in self.hooks:
@@ -164,7 +140,6 @@ class Server:
         self.not_found.response(__stream, connection.aes_key)
         __stream.close()
         print(f"Oblivion/1.0 From {__address} {hook.olps} 404")
-        # self.keypool.keep()
 
     def handle(self, __stream: socket.socket, __address: Tuple[str, int]):
         try:
@@ -180,13 +155,10 @@ class Server:
         except:
             raise exceptions.AddressAlreadyInUse
         tcp.listen(self.max_connections)
-        keep_thread = Thread(target=lambda: self.keypool.keep_forever(1024))
-        keep_thread.daemon = True
-        keep_thread.start()
+        tcp.setsockopt(socket.SOL_TCP, socket.TCP_FASTOPEN, 5)
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
         print("Quit the server by CTRL-BREAK.")
 
         while True:
             stream, address = tcp.accept()  # 等待客户端连接
-            stream.settimeout(20)
             self.threadpool.submit(self.handle, stream, address)

@@ -42,6 +42,7 @@ class BaseRequest:
         data: dict = None,
         key_pair: Tuple[bytes, bytes] = None,
         verify: bool = True,
+        tfo: bool = True,
     ) -> None:
         self.method = method.upper()
         self.path = OblivionPath(olps)
@@ -51,6 +52,7 @@ class BaseRequest:
         self.data = data
         self.key_pair = key_pair
         self.verify = verify
+        self.tfo = tfo
         self.prepared = False
 
     @abc.abstractmethod

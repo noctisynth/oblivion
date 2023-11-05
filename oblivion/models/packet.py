@@ -37,7 +37,7 @@ class ACK(BasePackage):
         return self
 
     def to_stream(self, __stream: socket):
-        __stream.sendall(self.plain_data)
+        __stream.send(self.plain_data)
 
     @property
     def plain_data(self) -> bytes:
@@ -58,19 +58,14 @@ class OKE(BasePackage):
         return self
 
     def from_stream(self, __stream: socket) -> "OKE":
-        print("[*] 接收公钥中...")
-        from datetime import datetime
-
-        pre = datetime.now()
         self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
-        print("[+] 公钥接收完毕, 用时{}".format(datetime.now() - pre))
         self.SHARED_AES_KEY = generate_shared_key(
             self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY
         )
         return self
 
     def to_stream(self, __stream: socket):
-        __stream.sendall(self.plain_data)
+        __stream.send(self.plain_data)
 
     @property
     def plain_data(self) -> bytes:
@@ -148,7 +143,7 @@ class OED(BasePackage):
         while attemp <= __attemps:
             ack_packet = ACK().new()
             ack_packet.to_stream(__stream)
-            __stream.sendall(self.plain_data)
+            __stream.send(self.plain_data)
             if __stream.recv(4) == ack_packet:
                 ack = True
                 break
