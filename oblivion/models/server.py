@@ -139,9 +139,9 @@ class Server:
         if hook.is_valid_header(request):
             return
 
-        self.not_found.response(__stream, connection.aes_key)
+        self.not_found.response(__stream, request, connection.aes_key)
         __stream.close()
-        print(f"Oblivion/1.0 From {__address} {hook.olps} 404")
+        print(f"{request.protocol}/{request.version} {request.method} From {__address} {hook.olps} 404")
 
     def handle(self, __stream: socket.socket, __address: Tuple[str, int]):
         try:
