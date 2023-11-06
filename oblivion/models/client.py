@@ -48,8 +48,8 @@ class Request(BaseRequest):
         self.send_header()
 
         oke = OKE(PRIVATE_KEY=self.private_key).from_public_key_bytes(self.public_key)
+        self.aes_key = oke.from_stream_with_salt(self.tcp).SHARED_AES_KEY
         oke.to_stream(self.tcp)
-        self.aes_key = oke.from_stream(self.tcp).SHARED_AES_KEY
 
         self.prepared = True
 

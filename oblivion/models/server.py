@@ -11,7 +11,6 @@ from ..utils.parser import OblivionRequest
 from ..utils.generator import generate_key_pair
 
 import socket
-import queue
 import os
 import traceback
 import json
@@ -31,9 +30,13 @@ class ServerConnection(BaseConnection):
         self.request.remote_addr = client_address[0]
         self.request.remote_port = client_address[1]
 
-        oke = OKE(PRIVATE_KEY=self.private_key).from_stream(stream)
-        self.aes_key = oke.SHARED_AES_KEY
-        oke.from_public_key_bytes(self.public_key).to_stream(stream)
+        oke = (
+            OKE(PRIVATE_KEY=self.private_key)
+            .new()
+            .from_public_key_bytes(self.public_key)
+        )
+        oke.to_stream_with_salt(stream)
+        self.aes_key = oke.from_stream(stream).SHARED_AES_KEY
 
         if self.request.method == "POST":
             self.request.POST = json.loads(
@@ -130,7 +133,7 @@ class Server:
             if hook.is_valid_header(request):
                 hook.response(__stream, request, connection.aes_key)
                 print(
-                    f"Oblivion/1.0 {request.method} From {__address[0]} {hook.olps} 200"
+                    f"{request.protocol}/{request.version} {request.method} From {__address[0]} {hook.olps} 200"
                 )
                 break
 

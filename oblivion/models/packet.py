@@ -4,9 +4,9 @@ from loguru import logger
 
 from .. import exceptions
 
+from ..utils.generator import generate_shared_key, generate_random_salt
 from ..utils.encryptor import encrypt_message
 from ..utils.decryptor import decrypt_message
-from ..utils.generator import generate_shared_key
 from ..utils.parser import length
 
 from ._models import BasePackage
@@ -50,8 +50,13 @@ class OKE(BasePackage):
     length: int
     PUBLIC_KEY: bytes
     PRIVATE_KEY: bytes
+    SALT: bytes
     REMOTE_PUBLIC_KEY: bytes
     SHARED_AES_KEY: bytes
+
+    def new(self) -> "OKE":
+        self.SALT = generate_random_salt()
+        return self
 
     def from_public_key_bytes(self, __public_key_bytes: bytes) -> "OKE":
         self.PUBLIC_KEY = __public_key_bytes
@@ -60,16 +65,32 @@ class OKE(BasePackage):
     def from_stream(self, __stream: socket) -> "OKE":
         self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
         self.SHARED_AES_KEY = generate_shared_key(
-            self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY
+            self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
+        )
+        return self
+
+    def from_stream_with_salt(self, __stream: socket) -> "OKE":
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        self.SALT = __stream.recv(int(__stream.recv(4).decode()))
+        self.SHARED_AES_KEY = generate_shared_key(
+            self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
         )
         return self
 
     def to_stream(self, __stream: socket):
         __stream.send(self.plain_data)
 
+    def to_stream_with_salt(self, __stream: socket):
+        __stream.send(self.plain_data)
+        __stream.send(self.plain_salt)
+
     @property
     def plain_data(self) -> bytes:
         return length(self.PUBLIC_KEY) + self.PUBLIC_KEY
+
+    @property
+    def plain_salt(self) -> bytes:
+        return length(self.SALT) + self.SALT
 
 
 class OED(BasePackage):

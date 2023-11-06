@@ -19,8 +19,6 @@ class Session:
         verify: bool = True,
         tfo: bool = True
     ):
-        # 创建请求
-        logger.debug(f"创建请求: {olps}")
         req = Request(method=method, olps=olps, data=data, key_pair=key_pair, verify=verify, tfo=tfo)
         req.prepare()
         return self.send(request=req)
