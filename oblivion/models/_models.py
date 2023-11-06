@@ -74,7 +74,7 @@ class BaseRequest:
 
 class BaseHook:
     def __init__(
-        self, olps: str, res: str = "", handle: Callable = None, method="GET"
+        self, olps: str, res: str = "", handle: Callable = None, method: str = "GET"
     ) -> None:
         self.olps = olps
         if res and handle:

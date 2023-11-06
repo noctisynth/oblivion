@@ -27,14 +27,9 @@ class ServerConnection(BaseConnection):
     def handshake(self, stream: socket.socket, client_address: Tuple[str, int]) -> None:
         len_header = int(stream.recv(4).decode())
         self.request = OblivionRequest(stream.recv(len_header).decode())  # 接收请求头
-        self.request.remote_addr = client_address[0]
-        self.request.remote_port = client_address[1]
+        self.request.remote_addr, self.request.remote_port = client_address
 
-        oke = (
-            OKE(PRIVATE_KEY=self.private_key)
-            .new()
-            .from_public_key_bytes(self.public_key)
-        )
+        oke = OKE(PRIVATE_KEY=self.private_key, PUBLIC_KEY=self.public_key).new()
         oke.to_stream_with_salt(stream)
         self.aes_key = oke.from_stream(stream).SHARED_AES_KEY
 
@@ -43,18 +38,22 @@ class ServerConnection(BaseConnection):
                 OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
             )
         elif self.request.method == "GET":
-            self.request.POST = None
+            self.request.POST = {}
         else:
             pass
 
-    def solve(self, client, client_address) -> OblivionRequest:
-        self.handshake(client, client_address)
+    def solve(self, stream: socket.socket, address: Tuple[str, int]) -> OblivionRequest:
+        self.handshake(stream, address)
         return self.request
 
 
 class Hook(BaseHook):
     def __init__(
-        self, olps: str, res: str = "", handle: Callable[..., Any] = None, method="GET"
+        self,
+        olps: str,
+        res: str = "",
+        handle: Callable[..., Any] = None,
+        method: str = "GET",
     ) -> None:
         super().__init__(olps, res, handle, method)
 
@@ -110,11 +109,11 @@ class Hooks(list[Hook]):
 class Server:
     def __init__(
         self,
-        host="0.0.0.0",
-        port=80,
-        max_connection=1024,
-        hooks=[],
-        not_found="404 Not Found",
+        host: str = "0.0.0.0",
+        port: int = 80,
+        max_connection: int = 1024,
+        hooks: Hooks = [],
+        not_found: str | Callable = "404 Not Found",
     ) -> None:
         self.host = host
         self.port = port
