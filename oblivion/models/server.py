@@ -131,17 +131,15 @@ class Server:
             logger.debug(f"Checking Hook: {hook.olps}")
             if hook.is_valid_header(request):
                 hook.response(__stream, request, connection.aes_key)
+                __stream.close()
                 print(
                     f"{request.protocol}/{request.version} {request.method} From {__address[0]} {hook.olps} 200"
                 )
-                break
-
-        if hook.is_valid_header(request):
-            return
+                return
 
         self.not_found.response(__stream, request, connection.aes_key)
         __stream.close()
-        print(f"{request.protocol}/{request.version} {request.method} From {__address} {hook.olps} 404")
+        print(f"{request.protocol}/{request.version} {request.method} From {__address[0]} {hook.olps} 404")
 
     def handle(self, __stream: socket.socket, __address: Tuple[str, int]):
         try:
