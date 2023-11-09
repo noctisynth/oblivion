@@ -44,6 +44,27 @@ class ACK(BasePackage):
         return self.sequence.encode()
 
 
+class OSC(BasePackage):
+    """Oblivious Status Code"""
+
+    STATUS_CODE: int
+
+    def from_int(self, __status_code: int) -> "OSC":
+        self.STATUS_CODE = __status_code
+        return self
+
+    def from_stream(self, __stream: socket) -> "OSC":
+        self.STATUS_CODE = int(__stream.recv(3).decode())
+        return self
+
+    def to_stream(self, __stream: socket) -> "OSC":
+        __stream.send(self.plain_data)
+
+    @property
+    def plain_data(self) -> bytes:
+        return str(self.STATUS_CODE).encode()
+
+
 class OKE(BasePackage):
     """Oblivious Key Exchange"""
 

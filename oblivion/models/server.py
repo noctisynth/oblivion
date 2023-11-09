@@ -3,7 +3,8 @@ from typing import Tuple, NoReturn, Callable, Any
 from concurrent.futures import ThreadPoolExecutor
 
 from ._models import BaseConnection, BaseHook
-from .packet import OKE, OED
+from .render import BaseResponse, TextResponse
+from .packet import OSC, OKE, OED
 
 from .. import exceptions
 
@@ -66,11 +67,14 @@ class Hook(BaseHook):
         self, tcp: socket.socket, request: OblivionRequest, aes_key: bytes
     ) -> None:
         if callable(self.res):
-            plaindata = bytes(self.res(request))
+            callback: BaseResponse = self.res(request)
         else:
-            plaindata = bytes(self.res)
+            callback: BaseResponse = self.res
 
-        OED(AES_KEY=aes_key).from_bytes(plaindata).to_stream(tcp, 5)
+        OED(AES_KEY=aes_key, STATUS_CODE=callback.status_code).from_bytes(
+            bytes(callback)
+        ).to_stream(tcp, 5)
+        OSC().from_int(callback.status_code).to_stream(tcp)
 
 
 class Hooks(list[Hook]):
@@ -124,7 +128,11 @@ class Server:
         self.port = port
         self.max_connections = max_connection
         self.hooks: Hooks = tuple(hooks)
-        self.not_found = Hook("/404", res=not_found)
+        self.not_found = (
+            Hook("/404", res=not_found)
+            if callable(not_found)
+            else Hook("/404", res=TextResponse(not_found))
+        )
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
 
     def _handle(self, __stream: socket.socket, __address: Tuple[str, int]) -> None:

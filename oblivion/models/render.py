@@ -5,14 +5,17 @@ import json
 
 
 class BaseResponse:
+    status_code: int = 200
+
     @abc.abstractmethod
     def __bytes__(self) -> bytes:
         raise NotImplementedError
 
 
 class FileResponse(BaseResponse):
-    def __init__(self, path) -> None:
+    def __init__(self, path: str | Path, status_code: int = 200) -> None:
         self.path = path
+        self.status_code = status_code
 
     def __bytes__(self) -> bytes:
         return (
@@ -21,8 +24,11 @@ class FileResponse(BaseResponse):
 
 
 class TextResponse(BaseResponse):
-    def __init__(self, text: str, encoding: str = "utf-8") -> None:
+    def __init__(
+        self, text: str, status_code: int = 200, encoding: str = "utf-8"
+    ) -> None:
         self.text = str(text)
+        self.status_code = status_code
         self.encoding = encoding
 
     def __bytes__(self) -> bytes:
@@ -30,11 +36,14 @@ class TextResponse(BaseResponse):
 
 
 class JsonResponse(BaseResponse):
-    def __init__(self, data: str | list | dict, encoding: str = "utf-8") -> None:
+    def __init__(
+        self, data: str | list | dict, status_code: int = 200, encoding: str = "utf-8"
+    ) -> None:
         if isinstance(data, (dict, list)):
             self.data = json.dumps(data)
         else:
             self.data = data
+        self.status_code = status_code
         self.encoding = encoding
 
     def __bytes__(self) -> bytes:

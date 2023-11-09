@@ -7,13 +7,28 @@ from ..utils.generator import generate_key_pair
 
 from .. import exceptions
 from ._models import BaseRequest
-from .packet import OKE, OED
+from .packet import OSC, OKE, OED
 
 import socket
 
 
 logger = multilogger(name="Oblivion", payload="models.client")
 """ `models.client`日志 """
+
+
+class Response:
+    header: str
+    content: bytes | str
+    olps: str
+    status_code: int
+
+    def __eq__(self, __response: "Response") -> bool:
+        return (
+            __response.header == self.header
+            and __response.content == self.content
+            and __response.olps.rstrip("/") == self.olps.rstrip("/")
+            and __response.status_code == self.status_code
+        )
 
 
 class Request(BaseRequest):
@@ -68,10 +83,14 @@ class Request(BaseRequest):
             else OED(AES_KEY=self.aes_key).from_json_or_string("{}")
         ).to_stream(self.tcp, 5)
 
-    def recv(self) -> str:
+    def recv(self) -> Response:
         if not self.prepared:
             raise NotImplementedError
 
-        return (
-            OED(AES_KEY=self.aes_key).from_stream(self.tcp, 5, verify=self.verify).DATA
-        )
+        oed = OED(AES_KEY=self.aes_key).from_stream(self.tcp, 5, verify=self.verify)
+        response = Response()
+        response.header = self.plain_text
+        response.content = oed.DATA
+        response.olps = self.olps
+        response.status_code = OSC().from_stream(self.tcp).STATUS_CODE
+        return response
