@@ -14,6 +14,7 @@ import socket
 import os
 import traceback
 import json
+import sys
 
 
 logger = multilogger(name="Oblivion", payload="models")
@@ -37,10 +38,14 @@ class ServerConnection(BaseConnection):
             self.request.POST = json.loads(
                 OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
             )
+            self.request.PUT = None
         elif self.request.method == "GET":
             self.request.POST = {}
+            self.request.PUT = None
+        elif self.request.method == "PUT":
+            self.request.PUT = OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
         else:
-            pass
+            raise exceptions.UnsupportedMethod(self.request.method)
 
     def solve(self, stream: socket.socket, address: Tuple[str, int]) -> OblivionRequest:
         self.handshake(stream, address)
@@ -138,7 +143,9 @@ class Server:
 
         self.not_found.response(__stream, request, connection.aes_key)
         __stream.close()
-        print(f"{request.protocol}/{request.version} {request.method} From {__address[0]} {request.olps} 404")
+        print(
+            f"{request.protocol}/{request.version} {request.method} From {__address[0]} {request.olps} 404"
+        )
 
     def handle(self, __stream: socket.socket, __address: Tuple[str, int]):
         try:
@@ -159,5 +166,9 @@ class Server:
         print("Quit the server by CTRL-BREAK.")
 
         while True:
-            stream, address = tcp.accept()  # 等待客户端连接
-            self.threadpool.submit(self.handle, stream, address)
+            try:
+                stream, address = tcp.accept()  # 等待客户端连接
+                self.threadpool.submit(self.handle, stream, address)
+            except KeyboardInterrupt:
+                tcp.close()
+                sys.exit()

@@ -149,7 +149,7 @@ class OED(BasePackage):
                 ack = True
                 break
             except Exception as e:
-                logger.warning(f"An error occured: {e}\nRetied {attemp} times.")
+                logger.warning(f"An error occured: {e}\nRetried {attemp} times.")
                 __stream.send(b"0000")
                 attemp += 1
                 continue

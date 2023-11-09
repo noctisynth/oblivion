@@ -36,3 +36,6 @@ class Session:
 
     def post(self, olps) -> str:
         return self.request("POST", olps)
+
+    def put(self, olps) -> str:
+        return self.request("PUT", olps)

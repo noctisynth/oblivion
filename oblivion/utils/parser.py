@@ -62,6 +62,7 @@ class OblivionRequest:
     data: str
     plain_text: str
     POST: dict
+    PUT: bytes
     remote_addr: str
     remote_port: int
 
