@@ -14,13 +14,15 @@ class BaseResponse:
 
 class FileResponse(BaseResponse):
     def __init__(self, path: str | Path, status_code: int = 200) -> None:
-        self.path = path
+        self.path = Path(path).resolve()
         self.status_code = status_code
 
     def __bytes__(self) -> bytes:
-        return (
-            Path(self.path).resolve().read_bytes() if Path(self.path).exists() else b""
-        )
+        if self.path.exists():
+            return self.path.read_bytes()
+        else:
+            self.status_code = 404
+            return b""
 
 
 class TextResponse(BaseResponse):
