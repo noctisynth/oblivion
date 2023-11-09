@@ -22,7 +22,7 @@ class FileResponse(BaseResponse):
 
 class TextResponse(BaseResponse):
     def __init__(self, text: str, encoding: str = "utf-8") -> None:
-        self.text = text
+        self.text = str(text)
         self.encoding = encoding
 
     def __bytes__(self) -> bytes:
@@ -30,8 +30,8 @@ class TextResponse(BaseResponse):
 
 
 class JsonResponse(BaseResponse):
-    def __init__(self, data: str | dict, encoding: str = "utf-8") -> None:
-        if isinstance(data, dict):
+    def __init__(self, data: str | list | dict, encoding: str = "utf-8") -> None:
+        if isinstance(data, (dict, list)):
             self.data = json.dumps(data)
         else:
             self.data = data

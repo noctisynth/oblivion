@@ -97,7 +97,7 @@ class BaseHook:
         return self.olps.rstrip("/") == olps.rstrip("/")
 
     def is_valid_header(self, header: OblivionRequest) -> bool:
-        return header.olps == self.olps.rstrip("/")
+        return header.olps.rstrip("/") == self.olps.rstrip("/")
 
 
 class BasePackage:
