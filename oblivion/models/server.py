@@ -65,7 +65,7 @@ class Hook(BaseHook):
 
     def response(
         self, tcp: socket.socket, request: OblivionRequest, aes_key: bytes
-    ) -> None:
+    ) -> int:
         if callable(self.res):
             callback: BaseResponse = self.res(request)
         else:
@@ -75,6 +75,7 @@ class Hook(BaseHook):
             bytes(callback)
         ).to_stream(tcp, 5)
         OSC().from_int(callback.status_code).to_stream(tcp)
+        return callback.status_code
 
 
 class Hooks(list[Hook]):
@@ -142,10 +143,10 @@ class Server:
 
         for hook in self.hooks:
             if hook.is_valid_header(request):
-                hook.response(__stream, request, connection.aes_key)
+                status_code = hook.response(__stream, request, connection.aes_key)
                 __stream.close()
                 print(
-                    f"{request.protocol}/{request.version} {request.method} From {__address[0]} {request.olps} 200"
+                    f"{request.protocol}/{request.version} {request.method} From {__address[0]} {request.olps} {status_code}"
                 )
                 return
 

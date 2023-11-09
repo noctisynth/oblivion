@@ -30,6 +30,9 @@ class Response:
             and __response.status_code == self.status_code
         )
 
+    def __bool__(self) -> bool:
+        return self.status_code < 400
+
 
 class Request(BaseRequest):
     def __init__(
