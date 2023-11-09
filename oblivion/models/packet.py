@@ -5,7 +5,7 @@ from loguru import logger
 from .. import exceptions
 
 from ..utils.generator import generate_shared_key, generate_random_salt
-from ..utils.encryptor import encrypt_message
+from ..utils.encryptor import encrypt_message, encrypt_data
 from ..utils.decryptor import decrypt_message
 from ..utils.parser import length
 
@@ -98,7 +98,7 @@ class OED(BasePackage):
 
     length: int
     AES_KEY: bytes
-    DATA: dict
+    DATA: str | bytes
     ENCRYPTED_DATA: bytes
     TAG: bytes
     NONCE: bytes
@@ -119,6 +119,10 @@ class OED(BasePackage):
 
     def from_encrypted_data(self, __data: bytes) -> "OED":
         self.ENCRYPTED_DATA = __data
+        return self
+
+    def from_bytes(self, __bytes: bytes) -> "OED":
+        self.ENCRYPTED_DATA, self.TAG, self.NONCE = encrypt_data(__bytes, self.AES_KEY)
         return self
 
     def from_stream(

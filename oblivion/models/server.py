@@ -66,11 +66,11 @@ class Hook(BaseHook):
         self, tcp: socket.socket, request: OblivionRequest, aes_key: bytes
     ) -> None:
         if callable(self.res):
-            plaintext = bytes(self.res(request))
+            plaindata = bytes(self.res(request))
         else:
-            plaintext = bytes(self.res)
+            plaindata = bytes(self.res)
 
-        OED(AES_KEY=aes_key).from_json_or_string(plaintext).to_stream(tcp, 5)
+        OED(AES_KEY=aes_key).from_bytes(plaindata).to_stream(tcp, 5)
 
 
 class Hooks(list[Hook]):
