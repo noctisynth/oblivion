@@ -10,7 +10,7 @@ from ._models import BaseRequest
 from .packet import OSC, OKE, OED
 
 import socket
-
+import json
 
 logger = multilogger(name="Oblivion", payload="models.client")
 """ `models.client`日志 """
@@ -18,7 +18,7 @@ logger = multilogger(name="Oblivion", payload="models.client")
 
 class Response:
     header: str
-    content: bytes | str
+    content: bytes
     olps: str
     status_code: int
 
@@ -31,7 +31,27 @@ class Response:
         )
 
     def __bool__(self) -> bool:
+        return self.ok
+
+    def __bytes__(self) -> bytes:
+        return self.content
+
+    def __repr__(self) -> str:
+        return f"<Response [{self.status_code}]>"
+
+    def __str__(self) -> str:
+        return self.text
+
+    @property
+    def ok(self) -> bool:
         return self.status_code < 400
+
+    @property
+    def text(self):
+        return self.content.decode()
+
+    def json(self):
+        return json.loads(self.content)
 
 
 class Request(BaseRequest):

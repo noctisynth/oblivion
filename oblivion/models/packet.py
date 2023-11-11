@@ -6,7 +6,7 @@ from .. import exceptions
 
 from ..utils.generator import generate_shared_key, generate_random_salt
 from ..utils.encryptor import encrypt_message, encrypt_data
-from ..utils.decryptor import decrypt_message
+from ..utils.decryptor import decrypt_bytes
 from ..utils.parser import length
 
 from ._models import BasePackage
@@ -119,7 +119,7 @@ class OED(BasePackage):
 
     length: int
     AES_KEY: bytes
-    DATA: str | bytes
+    DATA: bytes
     ENCRYPTED_DATA: bytes
     TAG: bytes
     NONCE: bytes
@@ -163,7 +163,7 @@ class OED(BasePackage):
             self.TAG = __stream.recv(len_tag)  # 捕获tag
 
             try:
-                self.DATA = decrypt_message(
+                self.DATA = decrypt_bytes(
                     self.ENCRYPTED_DATA,
                     self.TAG,
                     self.AES_KEY,
