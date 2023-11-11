@@ -100,6 +100,8 @@ class Request(BaseRequest):
         if self.method == "POST":
             if isinstance(self.data, dict):
                 oed = OED(AES_KEY=self.aes_key).from_dict(self.data)
+            elif not self.data:
+                oed = OED(AES_KEY=self.aes_key).from_dict({})
             else:
                 raise ValueError("POST data must be dict!")
         elif self.method == "PUT":
@@ -107,6 +109,8 @@ class Request(BaseRequest):
                 oed = OED(AES_KEY=self.aes_key).from_bytes(self.data)
             else:
                 raise ValueError("PUT file must be bytes, not others!")
+        elif self.method == "GET":
+            return
         else:
             raise exceptions.UnsupportedMethod
 
