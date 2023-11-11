@@ -84,15 +84,15 @@ class OKE(BasePackage):
         return self
 
     def from_stream(self, __stream: socket) -> "OKE":
-        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(8).decode()))
         self.SHARED_AES_KEY = generate_shared_key(
             self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
         )
         return self
 
     def from_stream_with_salt(self, __stream: socket) -> "OKE":
-        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
-        self.SALT = __stream.recv(int(__stream.recv(4).decode()))
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(8).decode()))
+        self.SALT = __stream.recv(int(__stream.recv(8).decode()))
         self.SHARED_AES_KEY = generate_shared_key(
             self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
         )
@@ -154,9 +154,9 @@ class OED(BasePackage):
         while attemp < __attemps:
             ack_packet = ACK().from_stream(__stream)  # 捕获ACK数据包
 
-            len_ciphertext = int(__stream.recv(4).decode())  # 捕获加密数据长度
-            len_nonce = int(__stream.recv(4).decode())  # 捕获nonce长度
-            len_tag = int(__stream.recv(4).decode())  # 捕获tag长度
+            len_ciphertext = int(__stream.recv(8).decode())  # 捕获加密数据长度
+            len_nonce = int(__stream.recv(8).decode())  # 捕获nonce长度
+            len_tag = int(__stream.recv(8).decode())  # 捕获tag长度
 
             self.ENCRYPTED_DATA = __stream.recv(len_ciphertext)  # 捕获加密数据
             self.NONCE = __stream.recv(len_nonce)  # 捕获nonce

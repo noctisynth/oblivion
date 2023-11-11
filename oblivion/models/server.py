@@ -137,7 +137,7 @@ class Server:
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
 
     def _handle(self, __stream: socket.socket, __address: Tuple[str, int]) -> None:
-        __stream.settimeout(20)
+        __stream.settimeout(8)
         connection = ServerConnection(generate_key_pair())
         request = connection.solve(__stream, __address)
 

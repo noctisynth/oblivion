@@ -36,3 +36,7 @@ class AllAttemptsRetryFailed(RequestException):
 
 class UnsupportedMethod(RequestException):
     """未知的请求方法"""
+
+
+class DataTooLarge(RequestException):
+    """负载信息过大"""

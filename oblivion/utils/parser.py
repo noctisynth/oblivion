@@ -1,15 +1,17 @@
-from ..exceptions import BadProtocol, InvalidOblivion
+from ..exceptions import BadProtocol, InvalidOblivion, DataTooLarge
 
 import re
 
 
-def length(string):
-    str_num = str(len(string))
-    if len(str_num) == 4:
+def length(__bytes: bytes) -> bytes:
+    str_num = str(len(__bytes))
+    if len(str_num) == 8:
         return str_num.encode()
+    elif len(str_num) >= 8:
+        raise DataTooLarge(f"Too large data: {str_num}")
 
     list_num = list(str_num)
-    while len(list_num) != 4:
+    while len(list_num) != 8:
         list_num.insert(0, "0")
 
     return "".join(list_num).encode()
