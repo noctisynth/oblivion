@@ -15,6 +15,7 @@ class Session:
         method: str,
         olps: str,
         data: dict = None,
+        file: bytes = None,
         key_pair: tuple = None,
         verify: bool = True,
         tfo: bool = True,
@@ -23,6 +24,7 @@ class Session:
             method=method,
             olps=olps,
             data=data,
+            file=file,
             key_pair=key_pair,
             verify=verify,
             tfo=tfo,
@@ -37,12 +39,3 @@ class Session:
         # 发送请求
         request.send()
         return request.recv()
-
-    def get(self, olps) -> Response:
-        return self.request("GET", olps)
-
-    def post(self, olps) -> Response:
-        return self.request("POST", olps)
-
-    def put(self, olps) -> Response:
-        return self.request("PUT", olps)

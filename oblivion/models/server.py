@@ -44,6 +44,9 @@ class ServerConnection(BaseConnection):
             self.request.POST = {}
             self.request.PUT = None
         elif self.request.method == "PUT":
+            self.request.POST = json.loads(
+                OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
+            )
             self.request.PUT = OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
         else:
             raise exceptions.UnsupportedMethod(self.request.method)

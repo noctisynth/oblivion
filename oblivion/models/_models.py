@@ -1,5 +1,5 @@
-from typing import Callable, Tuple
-from ..utils.parser import Oblivion, OblivionPath, OblivionRequest
+from typing import Callable
+from ..utils.parser import OblivionRequest
 from .router import Route
 
 import abc
@@ -28,48 +28,6 @@ class BaseConnection:
 
     @abc.abstractmethod
     def solve(self):
-        raise NotImplementedError
-
-
-class BaseRequest:
-    method: str
-    olps: str
-    data: bytes | bytearray
-
-    def __init__(
-        self,
-        method: str = None,
-        olps: str = None,
-        data: dict = None,
-        key_pair: Tuple[bytes, bytes] = None,
-        verify: bool = True,
-        tfo: bool = True,
-    ) -> None:
-        self.method = method.upper()
-        self.path = OblivionPath(olps)
-        self.olps = self.path.olps
-        self.oblivion = Oblivion(method=method, olps=self.olps)
-        self.plain_text = self.oblivion.plain_text
-        self.data = data
-        self.key_pair = key_pair
-        self.verify = verify
-        self.tfo = tfo
-        self.prepared = False
-
-    @abc.abstractmethod
-    def __repr__(self) -> str:
-        return "<BaseRequest [Oblivion]>"
-
-    @abc.abstractmethod
-    def prepare(self) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def send(self) -> None:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def recv(self) -> str:
         raise NotImplementedError
 
 

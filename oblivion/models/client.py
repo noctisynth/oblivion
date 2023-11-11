@@ -2,11 +2,9 @@ from typing import Tuple
 from multilogging import multilogger
 from loguru import logger
 
-from ..utils.parser import length
+from ..utils.parser import length, Oblivion, OblivionPath
 from ..utils.generator import generate_key_pair
-
 from .. import exceptions
-from ._models import BaseRequest
 from .packet import OSC, OKE, OED
 
 import socket
@@ -54,17 +52,28 @@ class Response:
         return json.loads(self.content)
 
 
-class Request(BaseRequest):
+class Request:
     def __init__(
         self,
         method: str = None,
         olps: str = None,
         data: dict = None,
+        file: bytes = None,
         key_pair: Tuple[bytes, bytes] = None,
         verify: bool = True,
         tfo: bool = True,
     ) -> None:
-        super().__init__(method, olps, data, key_pair, verify, tfo)
+        self.method = method.upper()
+        self.path = OblivionPath(olps)
+        self.olps = self.path.olps
+        self.oblivion = Oblivion(method=method, olps=self.olps)
+        self.plain_text = self.oblivion.plain_text
+        self.data = data
+        self.file = file
+        self.key_pair = key_pair
+        self.verify = verify
+        self.tfo = tfo
+        self.prepared = False
 
     def __repr__(self) -> str:
         return f"<Request [{self.method}] {self.olps}>"
@@ -98,15 +107,24 @@ class Request(BaseRequest):
 
     def send(self) -> None:
         if self.method == "POST":
-            if isinstance(self.data, dict):
+            if isinstance(self.data, (dict, list)):
                 oed = OED(AES_KEY=self.aes_key).from_dict(self.data)
             elif not self.data:
                 oed = OED(AES_KEY=self.aes_key).from_dict({})
             else:
                 raise ValueError("POST data must be dict!")
         elif self.method == "PUT":
-            if isinstance(self.data, bytes):
-                oed = OED(AES_KEY=self.aes_key).from_bytes(self.data)
+            if isinstance(self.data, (dict, list)):
+                OED(AES_KEY=self.aes_key).from_dict(self.data).to_stream(self.tcp, 5)
+            elif not self.data:
+                OED(AES_KEY=self.aes_key).from_dict({}).to_stream(self.tcp, 5)
+            else:
+                raise ValueError("PUT data must be dict!")
+
+            if isinstance(self.file, (bytes, bytearray)):
+                oed = OED(AES_KEY=self.aes_key).from_bytes(self.file)
+            elif not self.file:
+                oed = OED(AES_KEY=self.aes_key).from_bytes(b"")
             else:
                 raise ValueError("PUT file must be bytes, not others!")
         elif self.method == "GET":
