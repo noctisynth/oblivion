@@ -27,7 +27,7 @@ class ServerConnection(BaseConnection):
         self.private_key, self.public_key = key_pair
 
     def handshake(self, stream: socket.socket, client_address: Tuple[str, int]) -> None:
-        len_header = int(stream.recv(4).decode())
+        len_header = int(stream.recv(8).decode())
         self.request = OblivionRequest(stream.recv(len_header).decode())  # 接收请求头
         self.request.remote_addr, self.request.remote_port = client_address
 
