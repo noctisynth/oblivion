@@ -97,14 +97,20 @@ class Request(BaseRequest):
         self.tcp.sendall(header)
 
     def send(self) -> None:
-        if self.method == "GET":
-            return
+        if self.method == "POST":
+            if isinstance(self.data, dict):
+                oed = OED(AES_KEY=self.aes_key).from_dict(self.data)
+            else:
+                raise ValueError("POST data must be dict!")
+        elif self.method == "PUT":
+            if isinstance(self.data, bytes):
+                oed = OED(AES_KEY=self.aes_key).from_bytes(self.data)
+            else:
+                raise ValueError("PUT file must be bytes, not others!")
+        else:
+            raise exceptions.UnsupportedMethod
 
-        (
-            OED(AES_KEY=self.aes_key).from_dict(self.data)
-            if self.data
-            else OED(AES_KEY=self.aes_key).from_json_or_string("{}")
-        ).to_stream(self.tcp, 5)
+        oed.to_stream(self.tcp, 5)
 
     def recv(self) -> Response:
         if not self.prepared:
