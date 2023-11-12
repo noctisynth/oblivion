@@ -123,7 +123,7 @@ class OED(BasePackage):
     ENCRYPTED_DATA: bytes
     TAG: bytes
     NONCE: bytes
-    plain_data: bytes
+    CHUNK_SIZE: int
 
     def __serialize_bytes(self, __bytes: bytes, __size: int = 1024) -> list[bytes]:
         size = len(__bytes)
@@ -134,7 +134,7 @@ class OED(BasePackage):
                 serialized_bytes.append(length(buffer) + buffer)
                 break
             serialized_bytes.append(b"1024" + __bytes[i : i + __size])
-        serialized_bytes.append(b"\EOF")
+        serialized_bytes.append(b"0000")
         return serialized_bytes
 
     def from_json_or_string(self, __json_or_str: str) -> "OED":
@@ -172,11 +172,25 @@ class OED(BasePackage):
             self.TAG = __stream.recv(len_tag)  # 捕获tag
 
             self.ENCRYPTED_DATA = b""
+            self.CHUNK_SIZE = 0
+            # size = int(__stream.recv(4).decode())
             while True:
-                prefix = __stream.recv(4).decode()
-                if prefix == "\EOF":
+                prefix = int(__stream.recv(4).decode())
+                if prefix == 0:
                     break
-                self.ENCRYPTED_DATA += __stream.recv(int(prefix))
+                # add = __stream.recv(prefix)
+                add = b""
+                # if not add:
+                #     break
+                # print(add)
+                # print(len(add))
+                while len(add) != prefix:
+                    add += __stream.recv(prefix - len(add))
+                    # if not add:
+                    #     break
+                self.ENCRYPTED_DATA += add
+                self.CHUNK_SIZE += 1
+                # print(self.CHUNK_SIZE)
 
             try:
                 self.DATA = decrypt_bytes(
@@ -208,8 +222,12 @@ class OED(BasePackage):
 
             __stream.send(self.plain_data)
 
+            t = 0
             for _bytes in self.__serialize_bytes(self.ENCRYPTED_DATA):
                 __stream.send(_bytes)
+                print(_bytes)
+                t += 1
+                print(t)
 
             if __stream.recv(4) == ack_packet:
                 ack = True
