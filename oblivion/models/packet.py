@@ -216,12 +216,10 @@ class OED(BasePackage):
 
             __stream.send(self.plain_data)
 
-            t = 0
+            self.CHUNK_SIZE = 0
             for _bytes in self.__serialize_bytes(self.ENCRYPTED_DATA):
                 __stream.send(_bytes)
-                print(_bytes)
-                t += 1
-                print(t)
+                self.CHUNK_SIZE += 1
 
             if __stream.recv(4) == ack_packet:
                 ack = True
