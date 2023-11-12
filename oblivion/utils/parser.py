@@ -5,13 +5,13 @@ import re
 
 def length(__bytes: bytes) -> bytes:
     str_num = str(len(__bytes))
-    if len(str_num) == 8:
+    if len(str_num) == 4:
         return str_num.encode()
-    elif len(str_num) >= 8:
-        raise DataTooLarge(f"Too large data: {str_num}")
+    elif len(str_num) >= 4:
+        raise DataTooLarge(f"Too large chunk: {str_num}!")
 
     list_num = list(str_num)
-    while len(list_num) != 8:
+    while len(list_num) < 4:
         list_num.insert(0, "0")
 
     return "".join(list_num).encode()

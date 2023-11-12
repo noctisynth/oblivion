@@ -84,15 +84,15 @@ class OKE(BasePackage):
         return self
 
     def from_stream(self, __stream: socket) -> "OKE":
-        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(8).decode()))
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
         self.SHARED_AES_KEY = generate_shared_key(
             self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
         )
         return self
 
     def from_stream_with_salt(self, __stream: socket) -> "OKE":
-        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(8).decode()))
-        self.SALT = __stream.recv(int(__stream.recv(8).decode()))
+        self.REMOTE_PUBLIC_KEY = __stream.recv(int(__stream.recv(4).decode()))
+        self.SALT = __stream.recv(int(__stream.recv(4).decode()))
         self.SHARED_AES_KEY = generate_shared_key(
             self.PRIVATE_KEY, self.REMOTE_PUBLIC_KEY, self.SALT
         )
@@ -125,6 +125,18 @@ class OED(BasePackage):
     NONCE: bytes
     plain_data: bytes
 
+    def __serialize_bytes(self, __bytes: bytes, __size: int = 1024) -> list[bytes]:
+        size = len(__bytes)
+        serialized_bytes = []
+        for i in range(0, len(__bytes), __size):
+            buffer = __bytes[i : i + __size]
+            if i + __size > size:
+                serialized_bytes.append(length(buffer) + buffer)
+                break
+            serialized_bytes.append(b"1024" + __bytes[i : i + __size])
+        serialized_bytes.append(b"\EOF")
+        return serialized_bytes
+
     def from_json_or_string(self, __json_or_str: str) -> "OED":
         self.ENCRYPTED_DATA, self.TAG, self.NONCE = encrypt_message(
             __json_or_str, self.AES_KEY
@@ -154,13 +166,17 @@ class OED(BasePackage):
         while attemp < __attemps:
             ack_packet = ACK().from_stream(__stream)  # 捕获ACK数据包
 
-            len_ciphertext = int(__stream.recv(8).decode())  # 捕获加密数据长度
-            len_nonce = int(__stream.recv(8).decode())  # 捕获nonce长度
-            len_tag = int(__stream.recv(8).decode())  # 捕获tag长度
-
-            self.ENCRYPTED_DATA = __stream.recv(len_ciphertext)  # 捕获加密数据
+            len_nonce = int(__stream.recv(4).decode())  # 捕获nonce长度
+            len_tag = int(__stream.recv(4).decode())  # 捕获tag长度
             self.NONCE = __stream.recv(len_nonce)  # 捕获nonce
             self.TAG = __stream.recv(len_tag)  # 捕获tag
+
+            self.ENCRYPTED_DATA = b""
+            while True:
+                prefix = __stream.recv(4).decode()
+                if prefix == "\EOF":
+                    break
+                self.ENCRYPTED_DATA += __stream.recv(int(prefix))
 
             try:
                 self.DATA = decrypt_bytes(
@@ -189,7 +205,12 @@ class OED(BasePackage):
         while attemp <= __attemps:
             ack_packet = ACK().new()
             ack_packet.to_stream(__stream)
+
             __stream.send(self.plain_data)
+
+            for _bytes in self.__serialize_bytes(self.ENCRYPTED_DATA):
+                __stream.send(_bytes)
+
             if __stream.recv(4) == ack_packet:
                 ack = True
                 break
@@ -200,11 +221,4 @@ class OED(BasePackage):
 
     @property
     def plain_data(self) -> bytes:
-        return (
-            length(self.ENCRYPTED_DATA)
-            + length(self.NONCE)
-            + length(self.TAG)
-            + self.ENCRYPTED_DATA
-            + self.NONCE
-            + self.TAG
-        )
+        return length(self.NONCE) + length(self.TAG) + self.NONCE + self.TAG

@@ -27,8 +27,7 @@ class ServerConnection(BaseConnection):
         self.private_key, self.public_key = key_pair
 
     def handshake(self, stream: socket.socket, client_address: Tuple[str, int]) -> None:
-        len_header = int(stream.recv(8).decode())
-        self.request = OblivionRequest(stream.recv(len_header).decode())  # 接收请求头
+        self.request = OblivionRequest(stream.recv(int(stream.recv(4).decode())).decode())  # 接收请求头
         self.request.remote_addr, self.request.remote_port = client_address
 
         oke = OKE(PRIVATE_KEY=self.private_key, PUBLIC_KEY=self.public_key).new()
@@ -127,6 +126,7 @@ class Server:
         max_connection: int = 1024,
         hooks: Hooks = [],
         not_found: str | Callable = "404 Not Found",
+        tfo: bool = True,
     ) -> None:
         self.host = host
         self.port = port
@@ -138,9 +138,10 @@ class Server:
             else Hook("/404", res=TextResponse(not_found))
         )
         self.threadpool = ThreadPoolExecutor(max_workers=os.cpu_count() * 3)
+        self.tfo = tfo
 
     def _handle(self, __stream: socket.socket, __address: Tuple[str, int]) -> None:
-        __stream.settimeout(8)
+        __stream.settimeout(20)
         connection = ServerConnection(generate_key_pair())
         request = connection.solve(__stream, __address)
 
@@ -167,13 +168,16 @@ class Server:
 
     def run(self) -> NoReturn:
         print("Performing system checks...\n")
+
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             tcp.bind((self.host, self.port))
         except:
             raise exceptions.AddressAlreadyInUse
         tcp.listen(self.max_connections)
-        tcp.setsockopt(socket.SOL_TCP, socket.TCP_FASTOPEN, 5)
+        if self.tfo:
+            tcp.setsockopt(socket.SOL_TCP, socket.TCP_FASTOPEN, 5)
+
         print(f"Starting server at Oblivion://{self.host}:{self.port}/")
         print("Quit the server by CTRL-BREAK.")
 
@@ -182,5 +186,6 @@ class Server:
                 stream, address = tcp.accept()  # 等待客户端连接
                 self.threadpool.submit(self.handle, stream, address)
             except KeyboardInterrupt:
+                self.threadpool.shutdown(False)
                 tcp.close()
                 sys.exit()

@@ -1,11 +1,11 @@
 from typing import Tuple
 from multilogging import multilogger
-from loguru import logger
 
+from .packet import OSC, OKE, OED
+
+from .. import exceptions
 from ..utils.parser import length, Oblivion, OblivionPath
 from ..utils.generator import generate_key_pair
-from .. import exceptions
-from .packet import OSC, OKE, OED
 
 import socket
 import json

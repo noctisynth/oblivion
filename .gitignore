@@ -4,6 +4,4 @@ build/
 .idea/
 venv/
 *.egg-info/
-setup.py
-pack.bat
 test*
