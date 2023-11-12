@@ -173,24 +173,18 @@ class OED(BasePackage):
 
             self.ENCRYPTED_DATA = b""
             self.CHUNK_SIZE = 0
-            # size = int(__stream.recv(4).decode())
+
             while True:
                 prefix = int(__stream.recv(4).decode())
                 if prefix == 0:
                     break
-                # add = __stream.recv(prefix)
+
                 add = b""
-                # if not add:
-                #     break
-                # print(add)
-                # print(len(add))
                 while len(add) != prefix:
                     add += __stream.recv(prefix - len(add))
-                    # if not add:
-                    #     break
+
                 self.ENCRYPTED_DATA += add
                 self.CHUNK_SIZE += 1
-                # print(self.CHUNK_SIZE)
 
             try:
                 self.DATA = decrypt_bytes(
