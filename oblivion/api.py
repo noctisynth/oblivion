@@ -19,8 +19,8 @@ def get(olps, key_pair=None, verify=True, tfo=True):
     return request("get", olps, None, None, key_pair, verify, tfo)
 
 
-def post(olps, data=None, file=None, key_pair=None, verify=True, tfo=True):
-    return request("post", olps, data, file, key_pair, verify, tfo)
+def post(olps, data=None, key_pair=None, verify=True, tfo=True):
+    return request("post", olps, data, None, key_pair, verify, tfo)
 
 
 def put(olps, data=None, file=None, key_pair=None, verify=True, tfo=True):
@@ -29,3 +29,6 @@ def put(olps, data=None, file=None, key_pair=None, verify=True, tfo=True):
 
 def forward(olps, data=None, file=None, key_pair=None, verify=True, tfo=True):
     return request("forward", olps, data, file, key_pair, verify, tfo)
+
+
+# def osh(olps, )

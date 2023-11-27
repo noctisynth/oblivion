@@ -77,7 +77,7 @@ class OblivionRequest:
             self.protocol = match.group(3)
             self.version = match.group(4)
         else:
-            raise BadProtocol
+            raise BadProtocol(header)
 
     def __repr__(self) -> str:
         return self.plain_text

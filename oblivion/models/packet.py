@@ -144,7 +144,6 @@ class OED(BasePackage):
         return self
 
     def from_dict(self, __dict: dict) -> "OED":
-        self.DATA = __dict
         self.ENCRYPTED_DATA, self.TAG, self.NONCE = encrypt_message(
             json.dumps(__dict), self.AES_KEY
         )

@@ -6,14 +6,14 @@ from Crypto.Random import get_random_bytes
 def generate_key_pair():
     """生成ECDH密钥对(私钥, 公钥)"""
     key = ECC.generate(curve="P-256")
-    return key.export_key(format="DER"), key.public_key().export_key(format="DER")
+    return key.export_key(format="DER"), key.public_key().export_key(format="SEC1")
 
 
 def generate_shared_key(__private_key, __public_key, __salt):
     """生成ECDH共享密钥"""
     return scrypt(
         (
-            ECC.import_key(__public_key).pointQ * ECC.import_key(__private_key).d
+            ECC.import_key(__public_key, curve_name="P-256").pointQ * ECC.import_key(__private_key).d
         ).x.to_bytes(32, "big"),
         __salt,
         16,
