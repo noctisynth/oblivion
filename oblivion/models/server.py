@@ -27,7 +27,9 @@ class ServerConnection(BaseConnection):
         self.private_key, self.public_key = key_pair
 
     def handshake(self, stream: socket.socket, client_address: Tuple[str, int]) -> None:
-        self.request = OblivionRequest(stream.recv(int(stream.recv(4).decode())).decode())  # 接收请求头
+        self.request = OblivionRequest(
+            stream.recv(int(stream.recv(4).decode())).decode()
+        )  # 接收请求头
         self.request.remote_addr, self.request.remote_port = client_address
 
         oke = OKE(PRIVATE_KEY=self.private_key, PUBLIC_KEY=self.public_key).new()
@@ -47,6 +49,10 @@ class ServerConnection(BaseConnection):
                 OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
             )
             self.request.PUT = OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
+        # elif self.request.method == "FORWARD":
+        #     self.request.FORWARD = json.loads(
+        #         OED(AES_KEY=self.aes_key).from_stream(stream, 5).DATA
+        #     )
         else:
             raise exceptions.UnsupportedMethod(self.request.method)
 
@@ -66,17 +72,15 @@ class Hook(BaseHook):
         super().__init__(olps, res, handle, method)
 
     def response(
-        self, tcp: socket.socket, request: OblivionRequest, aes_key: bytes
+        self, stream: socket.socket, request: OblivionRequest, aes_key: bytes
     ) -> int:
         if callable(self.res):
             callback: BaseResponse = self.res(request)
         else:
             callback: BaseResponse = self.res
 
-        OED(AES_KEY=aes_key, STATUS_CODE=callback.status_code).from_bytes(
-            bytes(callback)
-        ).to_stream(tcp, 5)
-        OSC().from_int(callback.status_code).to_stream(tcp)
+        OED(AES_KEY=aes_key).from_bytes(bytes(callback)).to_stream(stream, 5)
+        OSC().from_int(callback.status_code).to_stream(stream)
         return callback.status_code
 
 
